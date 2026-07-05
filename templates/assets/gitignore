@@ -1,0 +1,39 @@
+# PES standard .gitignore — macOS, Xcode/Swift, Ruby/fastlane, Firebase, data.
+# Delete sections that don't apply; add project entries at the bottom.
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Xcode / Swift
+DerivedData/
+build/
+*.xcuserstate
+xcuserdata/
+.swiftpm/
+.build/
+
+# Signing & secrets — never committed, no exceptions
+*.p8
+*.p12
+*.mobileprovision
+*.provisionprofile
+*.certSigningRequest
+.env
+.env.*
+!.env.example
+
+# Ruby / fastlane (screenshots and metadata ARE committed — they're content)
+vendor/
+.bundle/
+fastlane/report.xml
+fastlane/test_output/
+fastlane/README.md
+
+# Firebase (if used)
+.firebase/
+firebase-debug.log
+ui-debug.log
+
+# Project

@@ -1,0 +1,22 @@
+# PES standard SwiftFormat config (nicklockwood/SwiftFormat).
+# Philosophy: stay close to defaults; this file mostly pins the Swift
+# version and a few explicit choices so output is stable across machines.
+# Run: swiftformat .   Check (CI): swiftformat --lint .
+
+--swiftversion 6.0
+
+# Explicit choices
+--indent 4
+--maxwidth 130
+--wraparguments before-first
+--wrapcollections before-first
+--stripunusedargs closure-only
+--self remove
+--importgrouping testable-bottom
+--header strip
+
+# Rules intentionally disabled
+--disable wrapMultilineStatementBraces
+
+# Exclusions
+--exclude .build,.swiftpm,DerivedData,**/Package.swift

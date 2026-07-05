@@ -1,0 +1,26 @@
+# Validates content on every change: if the data build succeeds, the
+# source data and generated manifest are structurally sound.
+name: Data CI
+
+on:
+  pull_request:
+    paths: [Data/**]
+  push:
+    branches: [main]
+    paths: [Data/**]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-data:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+      - name: Build data bundles
+        run: cd Data && python3 build.py --clean --verbose

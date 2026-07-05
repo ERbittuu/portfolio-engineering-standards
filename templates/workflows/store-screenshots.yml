@@ -1,0 +1,39 @@
+# Upload store screenshots to App Store Connect (checksum sync, idempotent).
+# Fires when a merge to main touches fastlane/screenshots; manual button as
+# fallback. NOTE: a red "failures of processing screenshots" often means
+# Apple processed slowly AFTER a successful upload — verify the listing
+# before re-running (see MIGRATE.md gotchas).
+name: Store Screenshots
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "fastlane/screenshots/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: store-screenshots
+  cancel-in-progress: false
+
+jobs:
+  push-screenshots:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.3"
+          bundler-cache: true
+
+      - name: Upload screenshots to App Store Connect
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_KEY_CONTENT: ${{ secrets.ASC_KEY_CONTENT }}
+        run: bundle exec fastlane screenshots

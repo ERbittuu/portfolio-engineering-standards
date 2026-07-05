@@ -1,0 +1,49 @@
+# Deliverfile — App Store Connect metadata configuration
+# Docs: https://docs.fastlane.tools/actions/deliver/
+
+# ── Identity ──────────────────────────────────────────────────────────────
+app_identifier "{{BUNDLE_ID}}"
+
+# ── Languages ─────────────────────────────────────────────────────────────
+# Store-listing locales. deliver activates missing ones and fills them from
+# fastlane/metadata/<locale>/. Locales without their own screenshots fall
+# back to the primary locale's screenshots on the store.
+# NOTE: the store locale list is Apple's fixed set — check before adding
+# (e.g. Hindi is supported, Gujarati is not).
+languages(["en-US"])
+
+# ── Paths ─────────────────────────────────────────────────────────────────
+# Resolved from the WORKING DIRECTORY (repo root), not the fastlane folder —
+# unprefixed "./metadata" silently points at nothing and deliver no-ops
+# with success.
+metadata_path    "./fastlane/metadata"
+screenshots_path "./fastlane/screenshots"
+
+# ── Categories ────────────────────────────────────────────────────────────
+primary_category   "{{PRIMARY_CATEGORY}}"
+# secondary_category "{{SECONDARY_CATEGORY}}"
+
+# ── Pricing ───────────────────────────────────────────────────────────────
+# Managed in App Store Connect directly — Apple removed the pricing
+# attributes from the API endpoint deliver used (price_tier breaks every
+# push with Spaceship::UnexpectedResponse).
+
+# ── Precheck ──────────────────────────────────────────────────────────────
+# API-key auth cannot scan IAPs (fastlane limitation).
+precheck_include_in_app_purchases false
+
+# ── Copyright ─────────────────────────────────────────────────────────────
+copyright "© {{YEAR}} {{OWNER_NAME}}"
+
+# ── Screenshots ───────────────────────────────────────────────────────────
+# Managed exclusively by the `screenshots` lane via sync_screenshots.
+# No overwrite flag — the legacy overwrite path double-uploads.
+
+# ── Submission ────────────────────────────────────────────────────────────
+submit_for_review false   # submission stays a human step
+automatic_release false
+phased_release    true
+
+# ── Options ───────────────────────────────────────────────────────────────
+skip_binary_upload true    # Xcode Cloud owns the build
+force              true    # no interactive HTML preview

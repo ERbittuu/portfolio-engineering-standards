@@ -1,0 +1,39 @@
+# Push App Store metadata (TEXT ONLY) to App Store Connect.
+# Fires when a merge to main touches fastlane/metadata; manual button as
+# fallback. Screenshots have their own workflow — never combine (the
+# legacy overwrite path double-uploads; see MIGRATE.md gotchas).
+name: Store Metadata
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "fastlane/metadata/**"
+      - "fastlane/Deliverfile"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: store-metadata
+  cancel-in-progress: false
+
+jobs:
+  push-metadata:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.3"
+          bundler-cache: true
+
+      - name: Push metadata to App Store Connect
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_KEY_CONTENT: ${{ secrets.ASC_KEY_CONTENT }}
+        run: bundle exec fastlane metadata

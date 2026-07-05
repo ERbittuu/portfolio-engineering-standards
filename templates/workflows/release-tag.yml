@@ -1,0 +1,54 @@
+# The tag IS the release (PLAYBOOK §5).
+#
+# To release: update CHANGELOG.md on main, then publish a GitHub Release
+# with tag vX.Y.Z. The tag fans out:
+#   • Xcode Cloud "Release": archive → TestFlight (version stamped from the
+#     tag by App/ci_scripts/ci_pre_xcodebuild.sh)
+#   • this workflow: CHANGELOG gate → store metadata → release notes
+# Remaining human steps: TestFlight device test, Submit in ASC.
+name: Release Tag
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-tag
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Verify CHANGELOG has a section for this version
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          grep -q "^## \[$VERSION\]" CHANGELOG.md || {
+            echo "::error::CHANGELOG.md has no '## [$VERSION]' section — add it and re-tag."; exit 1; }
+
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.3"
+          bundler-cache: true
+
+      - name: Push metadata to App Store Connect
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_KEY_CONTENT: ${{ secrets.ASC_KEY_CONTENT }}
+        run: bundle exec fastlane metadata
+
+      - name: Create GitHub Release with changelog notes
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          awk "/^## \[$VERSION\]/{flag=1; next} /^## \[/{flag=0} flag" CHANGELOG.md > notes.md
+          gh release create "$GITHUB_REF_NAME" --title "$VERSION" --notes-file notes.md --verify-tag || \
+          gh release edit "$GITHUB_REF_NAME" --notes-file notes.md

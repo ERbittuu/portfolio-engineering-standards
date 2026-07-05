@@ -1,0 +1,75 @@
+# PES Fastfile — store content only (build/sign/deliver is Xcode Cloud's
+# job). Runs in GitHub Actions; local runs are the fallback (fastlane/.env).
+# Every known ASC API landmine is already defused here — see MIGRATE.md
+# gotchas before "improving" anything.
+
+default_platform(:ios)
+
+platform :ios do
+
+  # ── Generate deliver's txt files from per-locale JSON ────────────────────
+  # fastlane/metadata/<locale>.json is the single source of truth.
+  private_lane :generate_metadata do
+    require 'json'
+    require 'fileutils'
+
+    # CWD differs between Fastfile code and deliver's actions — anchor to
+    # this Fastfile's own location so the glob can never silently miss.
+    metadata_root = File.expand_path("metadata", __dir__)
+
+    jsons = Dir.glob(File.join(metadata_root, "*.json"))
+    UI.user_error!("No locale JSON files found in #{metadata_root}") if jsons.empty?
+
+    jsons.each do |path|
+      locale = File.basename(path, ".json")
+      fields = JSON.parse(File.read(path))
+
+      dir = File.join(metadata_root, locale)
+      FileUtils.mkdir_p(dir)
+
+      fields.each do |field, value|
+        value = value.join("\n") if value.is_a?(Array)
+        File.write(File.join(dir, "#{field}.txt"), value)
+      end
+
+      UI.message("Generated #{fields.keys.count} fields for #{locale}")
+    end
+
+    UI.success("Metadata txt files generated from per-locale JSON files")
+  end
+
+  private_lane :setup_api_key do
+    app_store_connect_api_key(
+      key_id:      ENV["ASC_KEY_ID"],
+      issuer_id:   ENV["ASC_ISSUER_ID"],
+      key_content: ENV["ASC_KEY_CONTENT"],
+      in_house:    false
+    )
+  end
+
+  desc "Push metadata (text only) to App Store Connect"
+  lane :metadata do
+    generate_metadata
+    setup_api_key
+    deliver(
+      skip_binary_upload: true,
+      # Never touch screenshots from the metadata lane: with empty local
+      # screenshot folders, overwrite can wipe the listing (fastlane #19935).
+      skip_screenshots:   true,
+      force:              true
+    )
+  end
+
+  desc "Sync screenshots to App Store Connect (checksum-based, idempotent)"
+  lane :screenshots do
+    setup_api_key
+    ENV["FASTLANE_ENABLE_BETA_DELIVER_SYNC_SCREENSHOTS"] = "1"
+    deliver(
+      skip_binary_upload: true,
+      skip_metadata:      true,
+      skip_screenshots:   false,
+      sync_screenshots:   true,
+      force:              true
+    )
+  end
+end
