@@ -40,7 +40,8 @@ GitHub ecosystem).
 ## Xcode Cloud
 
 **Use when:** any iOS/macOS app distributed through TestFlight/App Store.
-CI (build+test on PRs) and CD (archive to TestFlight on tags).
+CI (build+test on PRs) and CD (archive to TestFlight on `release/*`
+branches — see PLAYBOOK §5 for why this is branch-driven, not tag-driven).
 
 **Avoid when:** the product isn't an ASC-distributed app; jobs are
 non-Apple (web, data); you need custom environments/hardware; you've

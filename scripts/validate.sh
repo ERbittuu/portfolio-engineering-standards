@@ -29,6 +29,18 @@ for y in templates/workflows/*.yml templates/github/*.yml templates/github/ISSUE
   ruby -ryaml -e "YAML.safe_load(File.read('$y'), aliases: true)" >/dev/null 2>&1 || err "$y invalid YAML"
 done
 
+# 4b. Ruby templates parse (ci_scripts/lib helpers, Fastfile)
+for r in templates/ci_scripts/lib/*.rb templates/fastlane/Fastfile; do
+  [[ -f "$r" ]] || continue
+  ruby -c "$r" >/dev/null 2>&1 || err "$r has syntax errors"
+done
+
+# 4c. Python templates parse
+for p in templates/scripts/ci/*.py; do
+  [[ -f "$p" ]] || continue
+  python3 -m py_compile "$p" 2>/dev/null || err "$p has syntax errors"
+done
+
 # 5. Core docs contain no unresolved {{PLACEHOLDER}}
 # (MIGRATE.md and templates/ legitimately mention the token syntax)
 if grep -rnE '\{\{[A-Z][A-Z_]*\}\}' README.md PLAYBOOK.md decisions/ 2>/dev/null \

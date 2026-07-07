@@ -47,6 +47,77 @@ platform :ios do
     )
   end
 
+  # ── Validate metadata JSON without pushing anything (PR check) ──────────
+  # Dry run of generate_metadata's parsing, plus every App Store Connect
+  # rejection worth catching before merge: emoji in What's New, leftover
+  # placeholder text, bad URLs, over-limit fields, unsupported locales.
+  # No network call. {{ EDIT store_locales to match Deliverfile's languages() }}
+  desc "Validate metadata JSON without pushing anything (PR check)"
+  lane :validate_metadata do
+    require 'json'
+
+    metadata_root = File.expand_path("metadata", __dir__)
+    store_locales = ["en-US"]  # must match Deliverfile's languages()
+
+    char_limits = {
+      "name"             => 30,
+      "subtitle"         => 30,
+      "keywords"         => 100,
+      "promotional_text" => 170,
+      "description"      => 4000,
+      "release_notes"    => 4000
+    }
+    required_fields = %w[name subtitle keywords support_url privacy_url release_notes description]
+    emoji_pattern = /[\u{2600}-\u{27BF}\u{2B00}-\u{2BFF}\u{1F300}-\u{1FAFF}]/
+
+    jsons = Dir.glob(File.join(metadata_root, "*.json"))
+    UI.user_error!("No locale JSON files found in #{metadata_root}") if jsons.empty?
+
+    errors = []
+
+    jsons.each do |path|
+      locale = File.basename(path, ".json")
+      fields = JSON.parse(File.read(path))
+
+      unless store_locales.include?(locale)
+        UI.message("Skipping #{locale}.json — not a store locale (#{store_locales.join(', ')})")
+        next
+      end
+
+      required_fields.each do |field|
+        value = fields[field]
+        text = value.is_a?(Array) ? value.join : value.to_s
+        errors << "#{locale}: missing required field '#{field}'" if text.strip.empty?
+      end
+
+      char_limits.each do |field, max|
+        value = fields[field]
+        next unless value
+        text = value.is_a?(Array) ? value.join("\n") : value.to_s
+        errors << "#{locale}: '#{field}' is #{text.length} chars, over the #{max}-char App Store limit" if text.length > max
+      end
+
+      %w[support_url privacy_url].each do |field|
+        value = fields[field].to_s
+        errors << "#{locale}: '#{field}' is not a valid URL: #{value.inspect}" unless value =~ %r{\Ahttps?://\S+\z}
+      end
+
+      fields.each do |field, value|
+        text = value.is_a?(Array) ? value.join("\n") : value.to_s
+        errors << "#{locale}: '#{field}' still has an UPDATE THIS placeholder" if text.include?("UPDATE THIS")
+        errors << "#{locale}: '#{field}' contains an emoji — Apple rejects these in store text" if text =~ emoji_pattern
+      end
+    end
+
+    if errors.empty?
+      UI.success("Metadata validation passed for #{jsons.count} locale file(s)")
+    else
+      UI.error("Metadata validation failed:")
+      errors.each { |e| UI.error("  - #{e}") }
+      UI.user_error!("#{errors.count} metadata problem(s) found — fix before merging")
+    end
+  end
+
   desc "Push metadata (text only) to App Store Connect"
   lane :metadata do
     generate_metadata

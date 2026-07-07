@@ -25,7 +25,9 @@ production.
 3. **No remote packages. All dependencies live inside the repo** — source
    copies for Swift libraries, official binary zip for Firebase. Builds
    should never depend on someone else's server.
-4. The git tag is the app version. Never store version numbers in the repo.
+4. The app version lives nowhere but a `release/X.Y.Z` branch and, once
+   shipped, a git tag created automatically on merge. Never a stored
+   version number, never a tag pushed by hand.
 5. One private repo per app. App code, data, store content, automation —
    all in one place.
 
@@ -42,4 +44,4 @@ cd my-app && git init -b main
 Simple SemVer, see [VERSION](VERSION) and [CHANGELOG.md](CHANGELOG.md).
 Release with `scripts/bump-version.sh` then `scripts/release.sh`.
 
-Current version: **1.0.0**
+Current version: **1.1.0**

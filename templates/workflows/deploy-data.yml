@@ -33,3 +33,25 @@ jobs:
           firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
           projectId: "{{FIREBASE_PROJECT_ID}}"
           channelId: live
+
+      # Every app install hits this immediately after deploy — catches the
+      # "file exists in the repo but Hosting isn't actually serving it"
+      # class of bug before real users do, given the blast radius here.
+      # Adjust the manifest path and the JSON key for your own index file.
+      - name: Smoke test — live manifest and one item bundle are reachable
+        run: |
+          BASE="https://{{FIREBASE_PROJECT_ID}}.web.app"
+          MANIFEST=$(curl -sSf "$BASE/manifest.json")
+          echo "$MANIFEST" | python3 -c "import json,sys; json.load(sys.stdin)" || {
+            echo "::error::manifest.json at $BASE is not valid JSON"
+            exit 1
+          }
+
+          BUNDLE_PATH=$(echo "$MANIFEST" | python3 -c "import json,sys; print(json.load(sys.stdin)['items'][0]['bundle'])")
+          BUNDLE_PATH="${BUNDLE_PATH#/}"
+          curl -sSfI "$BASE/$BUNDLE_PATH" > /dev/null || {
+            echo "::error::sample item bundle $BASE/$BUNDLE_PATH is not reachable"
+            exit 1
+          }
+
+          echo "Smoke test passed: manifest.json valid, sample bundle ($BUNDLE_PATH) reachable"

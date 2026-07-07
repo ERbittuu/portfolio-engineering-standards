@@ -25,7 +25,7 @@
 See [CHANGELOG.md](CHANGELOG.md) for history.
 
 ```sh
-{{e.g., scripts/release.sh 1.2.0  # or: tag vX.Y and Xcode Cloud takes over}}
+{{e.g., scripts/release.sh 1.2.0  # or: push a release/X.Y.Z branch and Xcode Cloud takes over}}
 ```
 
 ## Project structure
@@ -35,10 +35,6 @@ See [CHANGELOG.md](CHANGELOG.md) for history.
 | Path | Purpose |
 |---|---|
 | `{{path}}` | {{purpose}} |
-
-## Decisions
-
-Notable choices are recorded in [docs/decisions/](docs/decisions/).
 
 ---
 Follows [Portfolio Engineering Standards](https://github.com/erbittuu/portfolio-engineering-standards) v{{PES_VERSION}}.
