@@ -1,0 +1,44 @@
+# PR check: does fastlane/metadata/ have any of the landmines listed in
+# MIGRATE.md's gotcha table? Emoji in release notes, "UPDATE THIS"
+# placeholders, over-limit fields, unsupported locales. No network call —
+# see the Fastfile's validate_metadata lane.
+#
+# Triggers on every PR and skips the actual check when metadata didn't
+# change, so this always reports a status (see lint.yml for why that
+# matters for a required check).
+name: Validate Metadata
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+  pull-requests: read   # dorny/paths-filter needs this to list changed files
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate-metadata:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: dorny/paths-filter@v3
+        id: changes
+        with:
+          filters: |
+            metadata:
+              - 'fastlane/metadata/**'
+              - 'fastlane/Deliverfile'
+
+      - uses: ruby/setup-ruby@v1
+        if: steps.changes.outputs.metadata == 'true'
+        with:
+          ruby-version: "3.3"
+          bundler-cache: true
+
+      - if: steps.changes.outputs.metadata == 'true'
+        run: bundle exec fastlane validate_metadata

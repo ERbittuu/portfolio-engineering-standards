@@ -1,0 +1,97 @@
+# Always-on architectural guardrails — protect decisions that are easy to
+# silently break in a moment of "just add this real quick". Run on every
+# PR regardless of which files changed: a regression can show up
+# anywhere, not just in the files you'd expect.
+#
+# Each job here exists because of something that actually happened on a
+# real app running this system — see MIGRATE.md's gotcha table.
+name: PR Guards
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # No secrets committed — private repos don't get GitHub's free secret
+  # scanning automatically. Scans the working tree at HEAD, not per-commit
+  # history: every PR here squash-merges, so only the final combined diff
+  # ever lands on main, and scanning per-commit flags things a later
+  # commit in the same PR already fixed.
+  secret-scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install gitleaks
+        run: |
+          curl -sSL -o gitleaks.tar.gz \
+            https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_linux_x64.tar.gz
+          tar -xzf gitleaks.tar.gz gitleaks
+
+      - name: Scan working tree for secrets
+        run: ./gitleaks detect --source . --no-banner --redact --no-git
+
+  # Zero remote packages, ever (PLAYBOOK §4) — builds must not depend on
+  # someone else's server. This is what stops it from quietly regressing
+  # the next time a package gets added through Xcode's UI.
+  dependency-guard:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: No remote Swift packages in the project
+        run: |
+          if grep -q "isa = XCRemoteSwiftPackageReference" App/*.xcodeproj/project.pbxproj; then
+            echo "::error::project.pbxproj references a remote Swift package — everything vendors locally (PLAYBOOK.md §4)"
+            exit 1
+          fi
+
+      - name: No committed Package.resolved
+        run: |
+          FOUND=$(find . -name "Package.resolved" -not -path "*/.build/*")
+          if [ -n "$FOUND" ]; then
+            echo "::error::Package.resolved found — dependencies must resolve to local vendored packages only"
+            echo "$FOUND"
+            exit 1
+          fi
+
+  # {{ OPTIONAL — delete this job if the app has no GoogleService-Info.plist,
+  #    or adapt the key/value pair to whatever config flag has bitten you.
+  #    This exact check would have caught IS_ANALYTICS_ENABLED sitting at
+  #    false on a real app for an unknown stretch of time, silently
+  #    dropping every analytics event with no error anywhere. }}
+  firebase-config-guard:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: IS_ANALYTICS_ENABLED must be true
+        run: |
+          python3 -c "
+          import plistlib
+          with open('App/Resources/GoogleService-Info.plist', 'rb') as f:
+              data = plistlib.load(f)
+          assert data.get('IS_ANALYTICS_ENABLED') is True, 'IS_ANALYTICS_ENABLED must be true'
+          "
+
+  # {{ OPTIONAL — only relevant if you adopt the AnalyticsManager pattern
+  #    from PLAYBOOK §7 (one enum, one file, name+parameters per case).
+  #    Firebase silently DROPS events/params that violate its own limits
+  #    instead of erroring, so this catches that class of bug at PR time
+  #    instead of quietly losing data in production. See
+  #    scripts/ci/validate_analytics_events.py. }}
+  analytics-event-guard:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+      - run: python3 scripts/ci/validate_analytics_events.py

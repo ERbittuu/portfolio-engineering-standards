@@ -19,7 +19,7 @@ excluded:
   - .build
   - .swiftpm
   - DerivedData
-  - Packages/*/.build
+  - App/Packages     # vendored third-party source — not ours to lint
 
 line_length:
   warning: 130

@@ -1,0 +1,49 @@
+# SwiftLint on our own code. App/Packages is vendored third-party source
+# and is never linted — see .swiftlint.yml's excluded list.
+#
+# Triggers on every PR, not just ones touching *.swift, and skips the
+# lint step itself when nothing relevant changed — so this always reports
+# a status. A path-filtered *trigger* is a trap for a check you ever want
+# to treat as required: a PR that never touches those paths never gets a
+# check run at all.
+name: Lint
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+  pull-requests: read   # dorny/paths-filter needs this to list changed files
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  swiftlint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: dorny/paths-filter@v3
+        id: changes
+        with:
+          filters: |
+            swift:
+              - 'App/**/*.swift'
+
+      - name: Install SwiftLint
+        if: steps.changes.outputs.swift == 'true'
+        run: |
+          curl -sSL -o swiftlint.zip \
+            https://github.com/realm/SwiftLint/releases/download/0.65.0/swiftlint_linux_amd64.zip
+          unzip -q swiftlint.zip -d swiftlint-bin
+
+      # Not --strict on a fresh migration: an app moving onto this system
+      # brings its own pre-existing style debt, and failing every PR on
+      # day one over unrelated legacy warnings just trains you to ignore
+      # this check. Flip to --strict once the backlog is clean.
+      - name: Run SwiftLint
+        if: steps.changes.outputs.swift == 'true'
+        run: ./swiftlint-bin/swiftlint lint App/Source

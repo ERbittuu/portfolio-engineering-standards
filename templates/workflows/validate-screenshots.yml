@@ -1,0 +1,36 @@
+# PR check: exact pixel dimensions per device class, complete locale sets,
+# no corrupt files. See scripts/ci/validate_screenshots.py — update the
+# REQUIRED dict there to match the device sizes you actually ship.
+#
+# Triggers on every PR and skips the actual check when screenshots didn't
+# change, so this always reports a status (see lint.yml for why that
+# matters for a required check).
+name: Validate Screenshots
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+  pull-requests: read   # dorny/paths-filter needs this to list changed files
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate-screenshots:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: dorny/paths-filter@v3
+        id: changes
+        with:
+          filters: |
+            screenshots:
+              - 'fastlane/screenshots/**'
+
+      - if: steps.changes.outputs.screenshots == 'true'
+        run: python3 scripts/ci/validate_screenshots.py

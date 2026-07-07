@@ -8,8 +8,9 @@ the non-obvious choices (usually a defused landmine — see MIGRATE.md).
 |---|---|---|
 | `assets/` | gitignore, gitattributes, editorconfig, swiftlint, swiftformat, env.example | repo root (dot-prefixed) |
 | `github/` | PR template, issue templates, dependabot | `.github/` |
-| `workflows/` | ci-data, deploy-data, store-metadata, store-screenshots, release-tag | `.github/workflows/` |
-| `ci_scripts/` | post_clone, pre_xcodebuild (tag→version), post_xcodebuild (dSYMs) | `App/ci_scripts/` |
+| `workflows/` | ci-data, deploy-data, store-metadata, store-screenshots, lint, pr-guards, validate-metadata, validate-screenshots, validate-release, release-merge | `.github/workflows/` |
+| `ci_scripts/` | post_clone, pre_xcodebuild (branch→version, ASC→build number), post_xcodebuild (dSYMs) | `App/ci_scripts/` |
+| `scripts/ci/` | PR-check scripts (`validate_screenshots.py`, `validate_analytics_events.py`) | `scripts/ci/` |
 | `fastlane/` | Fastfile, Deliverfile, Appfile, Gemfile, locale JSON template | `fastlane/` + root Gemfile |
 | `docs/` | README / CHANGELOG / SECURITY skeletons | repo root |
 

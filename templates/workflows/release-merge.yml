@@ -1,0 +1,56 @@
+# Fires once per shipped version: when a release/X.Y.Z branch merges to
+# main (PLAYBOOK §5). Creates the permanent vX.Y.Z tag on the merge
+# commit — a pure historical record. It triggers nothing (see
+# App/ci_scripts/ci_pre_xcodebuild.sh for why archive builds are
+# branch-triggered instead, never tag-triggered) — and publishes the
+# GitHub Release with notes pulled from CHANGELOG.md.
+#
+# Store metadata push is NOT handled here — it's fully independent,
+# already triggered by any merge touching fastlane/metadata/** (see
+# validate-metadata / the metadata push workflow), whether or not that
+# merge came from a release branch.
+name: Release Merge
+
+on:
+  pull_request:
+    types: [closed]
+    branches: [main]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-merge
+  cancel-in-progress: false
+
+jobs:
+  tag-release:
+    if: github.event.pull_request.merged == true && startsWith(github.event.pull_request.head.ref, 'release/')
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.merge_commit_sha }}
+
+      - name: Determine version from the branch name
+        run: |
+          BRANCH="${{ github.event.pull_request.head.ref }}"
+          echo "VERSION=${BRANCH#release/}" >> "$GITHUB_ENV"
+
+      - name: Verify CHANGELOG has a section for this version
+        run: |
+          grep -q "^## \[$VERSION\]" CHANGELOG.md || {
+            echo "::error::CHANGELOG.md has no '## [$VERSION]' section — this should have been caught before merge (see validate-release.yml)."
+            exit 1
+          }
+
+      - name: Create GitHub Release (creates the vX.Y.Z tag on the merge commit)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          awk "/^## \[$VERSION\]/{flag=1; next} /^## \[/{flag=0} flag" CHANGELOG.md > notes.md
+          gh release create "v$VERSION" \
+            --title "$VERSION" \
+            --notes-file notes.md \
+            --target "${{ github.event.pull_request.merge_commit_sha }}"
