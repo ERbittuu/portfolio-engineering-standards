@@ -6,16 +6,15 @@ portfolio.
 
 ## aso/ — App Store Optimization & app marketing
 
-16 hand-picked skills vendored from https://github.com/Eronred/aso-skills
-(MIT — see `aso/LICENSE`) — only the ones useful for this portfolio
-(solo iOS dev, organic growth, subscriptions): aso-audit,
-keyword-research, metadata-optimization, localization,
+11 hand-picked, pure-ASO skills vendored from
+https://github.com/Eronred/aso-skills (MIT — see `aso/LICENSE`):
+aso-audit, keyword-research, metadata-optimization, localization,
 screenshot-optimization, app-icon-optimization, category-positioning,
 competitor-analysis, rating-prompt-strategy, review-management,
-seasonal-aso, app-launch, app-rejection-recovery, paywall-optimization,
-subscription-lifecycle, monetization-strategy. Dropped upstream skills:
-Android, paid UA/ads, attribution, and Appeeky-API-dependent analytics.
-The kept frameworks work fully offline — no network or API key needed.
+seasonal-aso. Everything else upstream (Android, paid UA, attribution,
+monetization, analytics) was deliberately not vendored. These are local
+copies — the frameworks work fully offline, no network or API key
+needed, and nothing has to be fetched from GitHub to use them.
 
 ## Install on a new Mac
 
