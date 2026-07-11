@@ -71,7 +71,26 @@ def asc_get(path, token)
   request = Net::HTTP::Get.new(uri)
   request["Authorization"] = "Bearer #{token}"
 
-  response = Net::HTTP.start(uri.host, uri.port, use_ssl: true) { |http| http.request(request) }
+  # Xcode Cloud's runners hit transient SSL resets / timeouts talking to the
+  # ASC API, and a single blip must not fail the whole archive. Retry network
+  # errors and transient server responses (429/5xx) with exponential backoff.
+  attempts = 0
+  begin
+    attempts += 1
+    response = Net::HTTP.start(uri.host, uri.port, use_ssl: true,
+                               open_timeout: 20, read_timeout: 30) { |http| http.request(request) }
+    if (response.is_a?(Net::HTTPTooManyRequests) || response.is_a?(Net::HTTPServerError)) && attempts < 5
+      raise IOError, "transient HTTP #{response.code}"
+    end
+  rescue Errno::ECONNRESET, Errno::ETIMEDOUT, Errno::ECONNREFUSED, EOFError, IOError,
+         Net::OpenTimeout, Net::ReadTimeout, OpenSSL::SSL::SSLError, SocketError => e
+    if attempts < 5
+      sleep(2**attempts) # 2, 4, 8, 16s
+      retry
+    end
+    abort "App Store Connect API unreachable after #{attempts} attempts for #{path}: #{e.class}: #{e.message}"
+  end
+
   unless response.is_a?(Net::HTTPSuccess)
     abort "App Store Connect API error #{response.code} for #{path}: #{response.body}"
   end
