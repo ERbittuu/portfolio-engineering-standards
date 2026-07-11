@@ -16,7 +16,11 @@ CLI logged in, Xcode signed into the team.
 2. Restructure to the playbook layout: project + sources + `ci_scripts/`
    under `App/`, content under `Data/`, `fastlane/` + `Gemfile` at root,
    entitlements into `App/Config/` (update `CODE_SIGN_ENTITLEMENTS` paths
-   in the pbxproj).
+   in the pbxproj). Inside `App/Source/`: exactly `App/`, `Features/<Name>/`,
+   `Shared/` (PLAYBOOK §1). With synchronized folder groups this is plain
+   `git mv` — but if the pbxproj has `membershipExceptions` (files shared
+   into watch/widget targets), update those relative paths in the same
+   commit or the extension targets silently lose the files.
 3. Run `scripts/setup.sh` from this repo. Fill every `{{PLACEHOLDER}}`
    (`git grep '{{'`), delete the parts this app doesn't need.
 4. Clean legacy naming: entry struct, `productName` in pbxproj, file
@@ -76,7 +80,9 @@ CLI created projects don't have it. Turn on Crashlytics email alerts.
    see the gotcha table, that field does not reliably preserve a
    multi-line paste.
 5. In ci_scripts remember: scripts start inside `ci_scripts/`, so
-   `cd "$CI_PRIMARY_REPOSITORY_PATH/App"` before any agvtool call.
+   `cd "$CI_PRIMARY_REPOSITORY_PATH/App"` first — the version-stamping
+   sed uses a project-relative path (and any agvtool call would need it
+   too).
 
 ## 5. PR checks (30 min)
 
@@ -129,6 +135,11 @@ deliver can no-op silently (see gotchas).
 | Xcode Cloud "Failed to create workflow" | GitHub App has no access to the repo (org owner must add it), or a stale `xcodecloud/manifest.json` in the project — delete it and restart Xcode |
 | Onboarding wizard stuck on a dependency repo | You still have remote packages. Make them local (step 2). Also add a GitHub account in Xcode Settings → Accounts |
 | `agvtool: There are no Xcode project files` in CI | Xcode Cloud starts scripts inside `ci_scripts/` — cd to the project folder first |
+| Archive ships the dev placeholder version even though the pre-build script "ran fine" | agvtool only edits literal Info.plist values. With `GENERATE_INFOPLIST_FILE=YES` (or an Info.plist whose version keys are `$(MARKETING_VERSION)` references) it is a silent no-op. Stamp `MARKETING_VERSION` / `CURRENT_PROJECT_VERSION` in the pbxproj with sed — see the template `ci_pre_xcodebuild.sh` |
+| `asc_build_number.rb` dies with a one-off SSL reset / timeout mid-archive | Xcode Cloud runners hit transient network failures against the ASC API. The template script retries network errors and 429/5xx with exponential backoff — don't remove that |
+| A store workflow goes permanently red: `Could not find lane` | The workflow↔Fastfile lane names are a contract: `validate_metadata`, `metadata`, `screenshots` must exist under exactly those names. Renaming a lane without touching `.github/workflows/` breaks the check silently-in-plain-sight |
+| Crashlytics reports arrive unsymbolicated; post-build log says `upload-symbols not found` (but the build is green) | The dSYM script's paths must be `App/Packages/FirebaseKit/Tools/upload-symbols` and `App/Resources/GoogleService-Info.plist` — a missing `App/` prefix makes it warn and `exit 0` forever |
+| Analytics dashboard empty for weeks, no errors anywhere | `IS_ANALYTICS_ENABLED` sitting at `false` in `GoogleService-Info.plist`. This shipped on three of four apps. `pr-guards.yml`'s `firebase-config-guard` now asserts it on every PR — keep that job |
 | Release workflow never triggers | Branch condition pattern is wrong, or "is prefix" isn't checked — `release/1.8.0` needs to match a `release/` prefix, not an exact string |
 | `ASC_KEY_ID not set` in an Xcode Cloud build log, even though you added it | The env var edit wasn't actually saved — re-open the workflow editor and confirm it's still listed, re-save if not |
 | `Could not parse PKey: no start line` from `asc_build_number.rb` | Xcode Cloud's Environment Variable text field doesn't reliably preserve a multi-line paste — it can strip the BEGIN/END markers or flatten the newlines entirely. The template script normalizes all of these forms automatically; if you hit this with your own script, reconstruct the PEM structure defensively rather than trusting the paste |

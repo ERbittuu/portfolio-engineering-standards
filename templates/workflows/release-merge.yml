@@ -51,6 +51,6 @@ jobs:
         run: |
           awk "/^## \[$VERSION\]/{flag=1; next} /^## \[/{flag=0} flag" CHANGELOG.md > notes.md
           gh release create "v$VERSION" \
-            --title "$VERSION" \
+            --title "{{PROJECT_NAME}} $VERSION" \
             --notes-file notes.md \
             --target "${{ github.event.pull_request.merge_commit_sha }}"

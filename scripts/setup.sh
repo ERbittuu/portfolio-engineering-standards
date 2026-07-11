@@ -33,6 +33,7 @@ copy assets/env.example    .env.example
 # docs
 copy docs/README.template.md    README.md
 copy docs/CHANGELOG.template.md CHANGELOG.md
+copy docs/CLAUDE.template.md    CLAUDE.md
 
 # github
 copy github/PULL_REQUEST_TEMPLATE.md           .github/PULL_REQUEST_TEMPLATE.md

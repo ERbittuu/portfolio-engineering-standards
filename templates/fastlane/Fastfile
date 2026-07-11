@@ -143,4 +143,53 @@ platform :ios do
       force:              true
     )
   end
+
+  # ── Manual lanes below — run locally, never called by CI ─────────────────
+
+  # Promotional text can change anytime without a new build or review.
+  desc "Push promotional text only (no build required, e.g. seasonal updates)"
+  lane :promo do
+    generate_metadata
+    setup_api_key
+    deliver(
+      skip_binary_upload: true,
+      skip_screenshots:   true,
+      force:              true
+    )
+  end
+
+  # Common tiers: 0=Free, 1=$0.99, 2=$1.99, 3=$2.99, 4=$3.99, 5=$4.99.
+  # IAP prices are NOT managed by deliver — those live in App Store Connect.
+  desc "Update app price tier in App Store Connect"
+  lane :pricing do |options|
+    tier = options[:tier] || 0
+    setup_api_key
+    deliver(
+      price_tier:         tier,
+      skip_binary_upload: true,
+      skip_screenshots:   true,
+      skip_metadata:      true,
+      force:              true
+    )
+    UI.success("Price tier updated to #{tier}")
+  end
+
+  # {{ EDIT the default contact details and the notes text for this app }}
+  desc "Push app review information to App Store Connect"
+  lane :review_notes do
+    setup_api_key
+    deliver(
+      skip_binary_upload: true,
+      skip_screenshots:   true,
+      skip_metadata:      true,
+      force:              true,
+      app_review_information: {
+        first_name:    ENV["REVIEW_FIRST_NAME"] || "{{OWNER_FIRST_NAME}}",
+        last_name:     ENV["REVIEW_LAST_NAME"]  || "{{OWNER_LAST_NAME}}",
+        phone_number:  ENV["REVIEW_PHONE"],
+        email_address: ENV["REVIEW_EMAIL"] || ENV["FASTLANE_APPLE_ID"],
+        notes:         "{{REVIEW_NOTES}}"
+      }
+    )
+  end
 end

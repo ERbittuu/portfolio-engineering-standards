@@ -1,2 +1,4 @@
 app_identifier "{{BUNDLE_ID}}"
+apple_id ENV["FASTLANE_APPLE_ID"]
+itc_team_id ENV["FASTLANE_ITC_TEAM_ID"]
 team_id "{{TEAM_ID}}"

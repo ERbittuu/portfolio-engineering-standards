@@ -37,3 +37,7 @@ firebase-debug.log
 ui-debug.log
 
 # Project
+
+# fastlane build products — regenerated in CI from metadata/<locale>.json
+fastlane/metadata/*/
+fastlane/report.xml

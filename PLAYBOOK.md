@@ -20,7 +20,14 @@ my-app/
 ├── scripts/ci/                  # PR-check scripts the workflows call into
 ├── App/                         # only what Xcode compiles
 │   ├── <Name>.xcodeproj
-│   ├── Source/<Feature>/        # group by feature, not by type
+│   ├── Source/                  # exactly three top-level folders:
+│   │   ├── App/                 #   @main, delegates, root navigation wiring, app-level setup
+│   │   ├── Features/<Name>/     #   one folder per user-facing feature (views + their viewmodels)
+│   │   └── Shared/              #   anything used by 2+ features; subfolders free-form
+│   │                            #   (Components, DesignSystem, Models, Services, Managers, Data, …)
+│   │                            #   Fixed contract: if the app uses the analytics-enum pattern (§7),
+│   │                            #   it lives at Shared/AnalyticsManager.swift — the PR check greps
+│   │                            #   that exact path.
 │   ├── Resources/               # assets, xcstrings, PrivacyInfo, GoogleService-Info
 │   ├── Config/                  # entitlements
 │   ├── Packages/                # local copies of all dependencies (see section 4)
@@ -54,6 +61,25 @@ too, not buried in one app's history.
 | Me | Write code, review my own PRs, merge, test on device, press Submit |
 
 Nothing runs on my Mac for a release. My Mac is for writing code.
+
+The complete automation inventory — every app carries exactly these,
+minus the ones marked optional that don't apply:
+
+| Automation | Where | Trigger | Does |
+|---|---|---|---|
+| `lint.yml` | GH Actions | every PR | SwiftLint over own source (never vendored packages) |
+| `pr-guards.yml` | GH Actions | every PR | secret scan, remote-dependency guard, Firebase config guard, analytics-event guard (§4) |
+| `validate-metadata.yml` | GH Actions | every PR | store-text rules that Apple rejects (skips if metadata untouched) |
+| `validate-screenshots.yml` | GH Actions | every PR | pixel dimensions, locale completeness (skips if screenshots untouched) |
+| `validate-release.yml` | GH Actions | PRs from `release/*` | CHANGELOG section exists, version newer than last tag |
+| `release-merge.yml` | GH Actions | release branch merges to main | creates the `vX.Y.Z` tag + GitHub Release from CHANGELOG |
+| `store-metadata.yml` | GH Actions | merge touches `fastlane/metadata` | pushes store text (never screenshots) |
+| `store-screenshots.yml` | GH Actions | merge touches `fastlane/screenshots` | checksum-syncs screenshots (never text) |
+| `ci-data.yml` *(optional)* | GH Actions | PR touches `Data/` | rebuilds + validates content |
+| `deploy-data.yml` *(optional)* | GH Actions | merge touches `Data/` | deploys to Firebase Hosting + live smoke test |
+| `CI` workflow | Xcode Cloud | push/PR touching `App/` | simulator build of the app |
+| `Release` workflow | Xcode Cloud | push to `release/*` | archive → TestFlight; pre/post scripts in `App/ci_scripts/` stamp the version, fetch the ASC build number, upload dSYMs |
+| dependabot | GitHub | weekly | bundler + actions version PRs |
 
 ## 3. Branches
 
@@ -89,7 +115,7 @@ you.
 | `validate-metadata.yml` | any PR, skips if `fastlane/metadata/` unchanged | Every App Store rejection worth catching before merge: emoji, placeholder text, over-limit fields, unsupported locales |
 | `validate-screenshots.yml` | any PR, skips if `fastlane/screenshots/` unchanged | Wrong pixel dimensions, incomplete locale sets, corrupt files |
 | `validate-release.yml` | any PR, skips unless it's from a `release/*` branch | CHANGELOG has a section for this version; the version is actually newer than the last tag |
-| `pr-guards.yml` | every PR, always | Secret scanning, a guard against remote dependencies creeping back in, plus whatever app-specific sanity checks earn their place (Firebase config, Analytics limits — see the file for examples) |
+| `pr-guards.yml` | every PR, always | Four jobs. Always: secret scan (gitleaks, working tree at HEAD), remote-dependency guard (no `XCRemoteSwiftPackageReference` ever). If the app has a `GoogleService-Info.plist`: `firebase-config-guard` asserting `IS_ANALYTICS_ENABLED` is true — this exact flag has shipped as `false` on three of four apps, silently dropping every event. If the app has the analytics-enum pattern (§7): `analytics-event-guard` running `scripts/ci/validate_analytics_events.py` |
 
 The "skip rather than don't-trigger" pattern matters: a workflow that's
 *path-filtered at the trigger level* never produces a check run at all
@@ -118,10 +144,20 @@ To release:
    manual release). Rollback: pause phased release, ship the next patch.
 
 `App/ci_scripts/ci_pre_xcodebuild.sh` reads the marketing version straight
-from the branch name (`release/1.8.0` → `1.8.0`) and asks App Store
-Connect for the build number: last build already uploaded for that exact
-version, plus one, or 1 if none exist. See
-`App/ci_scripts/lib/asc_build_number.rb`.
+from the branch name (`release/1.8.0` → `1.8.0`; `release/3.6` works too)
+and asks App Store Connect for the build number: last build already
+uploaded for that exact version, plus one, or 1 if none exist. See
+`App/ci_scripts/lib/asc_build_number.rb` — it retries transient network
+errors and 429/5xx with backoff, because Xcode Cloud runners hit sporadic
+SSL resets against the ASC API.
+
+The script then stamps `MARKETING_VERSION` and `CURRENT_PROJECT_VERSION`
+directly in the pbxproj with `sed` — NOT with agvtool. These projects use
+`GENERATE_INFOPLIST_FILE=YES` (or an Info.plist whose version keys
+reference the build settings), and agvtool only edits literal Info.plist
+values, so on these projects it is a silent no-op that leaves the dev
+placeholder version on the archive. The `/g` in the sed also keeps
+watch/widget extension targets on the same version for free.
 
 **Read this before relying on that build number resetting per version:**
 Xcode Cloud maintains its own global, sequential build-number counter per
@@ -151,6 +187,12 @@ one build.
 - The metadata lane is text-only. The screenshots lane uses
   `sync_screenshots` (checksum based, safe to re-run). Never mix them —
   the old overwrite path uploads everything twice.
+- Lane names are a CONTRACT with the workflows: `validate_metadata`,
+  `metadata`, `screenshots` must exist under exactly those names —
+  renaming one turns its workflow into a permanent red check. Three more
+  manual lanes ship as standard, run locally and never by CI: `promo`
+  (promotional text only — changeable anytime without a build), `pricing`
+  (price tier), `review_notes` (app review contact info).
 - Auth is an App Store Connect API key in repo secrets (`ASC_KEY_ID`,
   `ASC_ISSUER_ID`, `ASC_KEY_CONTENT`). Never Apple ID login. Xcode Cloud
   needs its own copy of the same key as Environment Variables on the
@@ -200,6 +242,54 @@ repos by default.
 - [ ] Old endpoints that shipped binaries still call: freeze, never delete
 - [ ] Branch protection: enable it if the repo is public or on a paid
       plan; otherwise the PR checks are advisory only — know that going in
+
+## 10. Starting a NEW app (the complete recipe)
+
+MIGRATE.md is for moving an *existing* app onto this system; this is the
+from-scratch path. Every step is the same for every app — an app that
+skips a feature (no remote content → no Data/, class-based analytics → no
+analytics guard) just deletes that part and nothing else changes.
+
+1. **Xcode project.** New iOS App project at `App/<Name>.xcodeproj`.
+   Keep `GENERATE_INFOPLIST_FILE=YES` (the version-stamping script
+   depends on versions living in build settings). Xcode 16+ folder
+   references are synchronized by default — keep that; it's what lets
+   files move on disk without pbxproj surgery. Create
+   `Source/App`, `Source/Features`, `Source/Shared` (§1) and put the
+   `@main` file in `Source/App/`.
+2. **Repo.** `git init -b main`, run PES `scripts/setup.sh`, fill every
+   `{{PLACEHOLDER}}` (`git grep '{{'`), delete what the app doesn't use:
+   no remote content → delete `ci-data.yml` + `deploy-data.yml`; no
+   AnalyticsManager enum → delete the `analytics-event-guard` job +
+   `scripts/ci/validate_analytics_events.py`. Set `store_locales` in the
+   Fastfile + `languages()` in the Deliverfile + `STORE_LOCALES` in
+   `scripts/ci/validate_screenshots.py` to the SAME list.
+   `gh repo create <org>/<Name> --private --source=. --push`.
+3. **Dependencies.** Vendored-local from day one (§4, MIGRATE §2). For
+   Firebase: `FirebaseKit` binary package + `-ObjC` in `OTHER_LDFLAGS`,
+   `upload-symbols` into `FirebaseKit/Tools/` (the dSYM script expects
+   `App/Packages/FirebaseKit/Tools/upload-symbols` exactly).
+4. **Firebase** (if used) — MIGRATE §3. Plist into `App/Resources/`,
+   check `IS_ANALYTICS_ENABLED` is `true` in it (the pr-guard enforces
+   this forever after).
+5. **App Store Connect.** Create the app record (bundle ID = forever).
+   One ASC API key (App Manager) lives in three places: password
+   manager, GitHub repo secrets (`ASC_KEY_ID` / `ASC_ISSUER_ID` /
+   `ASC_KEY_CONTENT`), and Xcode Cloud Release-workflow environment
+   variables — the last one cannot be created via API, only in the UI.
+6. **Xcode Cloud** — MIGRATE §4, unchanged for a new app: grant the
+   GitHub App access first, then two workflows (`CI` on main+PRs, and
+   `Release` on Branch Changes with `release/` prefix), both filtered to
+   Files and Folders = `App`. The product connection must be made in the
+   Xcode/ASC UI — the API cannot create it.
+7. **Secrets for data hosting** (if used): `FIREBASE_SERVICE_ACCOUNT`
+   repo secret, Hosting rights only.
+8. **Prove the automation before writing the app.** Open one throwaway
+   PR that touches a Swift file, a metadata JSON, and a screenshot — all
+   checks must produce a run. Then do a `release/0.1.0` dry run end to
+   end (§5): branch → Xcode Cloud archive → TestFlight → merge → tag
+   appears. Automation you haven't seen fire is not automation.
+9. Finish the §9 once-per-app checklist.
 
 ---
 
