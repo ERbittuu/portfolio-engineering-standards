@@ -35,6 +35,12 @@ precheck_include_in_app_purchases false
 # ── Copyright ─────────────────────────────────────────────────────────────
 copyright "© {{YEAR}} {{OWNER_NAME}}"
 
+# ── URLs ──────────────────────────────────────────────────────────────────
+# support/marketing/privacy URLs live in metadata/<locale>.json — NEVER set
+# them here as plain strings: deliver treats URL fields as per-locale
+# hashes and aborts with "'support_url' value must be a Hash!" (see
+# MIGRATE.md gotchas).
+
 # ── Screenshots ───────────────────────────────────────────────────────────
 # Managed exclusively by the `screenshots` lane via sync_screenshots.
 # No overwrite flag — the legacy overwrite path double-uploads.

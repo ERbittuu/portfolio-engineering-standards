@@ -151,6 +151,7 @@ deliver can no-op silently (see gotchas).
 | Tag never triggers the Release workflow | You're still using a tag-based Release trigger — this system is branch-driven now (PLAYBOOK §5), no tag condition should exist on that workflow at all |
 | deliver crashes on `price_tier` | Apple removed pricing from that API. Manage price in the ASC website, delete price_tier |
 | deliver fails on IAP precheck | API key auth can't check IAPs — `precheck_include_in_app_purchases false` |
+| deliver aborts: `'support_url' value must be a Hash! Found String instead.` | `support_url`/`marketing_url`/`privacy_url` are per-locale localized options — a plain string in the Deliverfile kills every metadata push (broke Drawing's; sat dormant in Prarthana behind an unset env var). Never set them in the Deliverfile; they belong in `metadata/<locale>.json` |
 | deliver says success but ASC shows nothing | Paths resolve from the working directory, not the fastlane folder. Use `./fastlane/metadata`, and in Ruby code anchor with `File.expand_path(..., __dir__)` |
 | Upload rejected: invalid characters | No emoji allowed in "What's New" — `validate-metadata.yml` catches this before merge now |
 | Upload rejected: supportUrl pattern | Placeholder text instead of a real URL — also caught pre-merge now |
