@@ -8,6 +8,23 @@ BEFORE debugging anything, the answer is probably already there.
 Needed on the Mac: Homebrew Ruby on PATH, `gh` CLI logged in, `firebase`
 CLI logged in, Xcode signed into the team.
 
+## 0. Already on PES? Use update.sh instead
+
+This guide is for moving an app onto the system the first time. An app that
+already has a `.pes-version` just needs:
+
+```sh
+portfolio-engineering-standards/scripts/update.sh --check ../MyApp   # what drifted
+portfolio-engineering-standards/scripts/update.sh ../MyApp           # apply
+```
+
+It rewrites only the files PES owns, re-renders the placeholders from the app
+itself, and leaves everything the app customises alone. Run `--check` first and
+commit before applying — the diff is the review.
+
+Files it reports but never touches: `.gitignore`, `.swiftlint.yml`, and any
+workflow PES no longer ships. Deleting those is your call, not the script's.
+
 ## 1. Repo (30 min)
 
 1. `git init -b main`, copy the standard `.gitignore` first, then one

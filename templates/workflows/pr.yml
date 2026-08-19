@@ -184,6 +184,26 @@ jobs:
       - if: steps.changes.outputs.screenshots == 'true'
         run: python3 scripts/ci/validate_screenshots.py
 
+  # Remote config reaches every user at once and they cannot roll it back, so
+  # this is the strictest check here. It refuses a minimumVersion above the
+  # version live on the App Store — that combination blocks 100% of users with
+  # no version available to update to.
+  validate-config:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: dorny/paths-filter@v3
+        id: changes
+        with:
+          filters: |
+            config:
+              - 'App/Resources/config.json'
+
+      - if: steps.changes.outputs.config == 'true'
+        run: python3 scripts/ci/validate_config.py "{{BUNDLE_ID}}"
+
   # ── Content pipeline ─────────────────────────────────────────────────────
   # {{ OPTIONAL — delete this job if the app ships no remote content.
   #    If the data build succeeds, the source data and generated manifest

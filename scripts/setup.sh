@@ -22,12 +22,18 @@ copy() { # <template-relative-src> <target-relative-dest>
 
 echo "PES v$(cat "$PES_ROOT/VERSION") → $TARGET"
 
+# Record the version so scripts/update.sh knows where this app started.
+if [[ ! -e "$TARGET/.pes-version" ]]; then
+  mkdir -p "$TARGET"
+  tr -d '[:space:]' < "$PES_ROOT/VERSION" > "$TARGET/.pes-version"
+  echo "  create .pes-version"
+fi
+
 # dotfiles
 copy assets/gitignore      .gitignore
 copy assets/gitattributes  .gitattributes
 copy assets/editorconfig   .editorconfig
 copy assets/swiftlint.yml  .swiftlint.yml
-copy assets/swiftformat    .swiftformat
 copy assets/env.example    .env.example
 
 # docs
@@ -56,6 +62,12 @@ chmod +x "$TARGET"/App/ci_scripts/*.sh 2>/dev/null || true
 # PR-check scripts (used by pr.yml's validate-screenshots / analytics guards)
 copy scripts/ci/validate_screenshots.py       scripts/ci/validate_screenshots.py
 copy scripts/ci/validate_analytics_events.py  scripts/ci/validate_analytics_events.py
+copy scripts/ci/validate_config.py            scripts/ci/validate_config.py
+
+# Standard remote config: one Swift file shared by every app, plus the config
+# it ships with and serves.
+copy app/SYSConfig.swift  App/Source/Shared/SYSConfig.swift
+copy app/config.json      App/Resources/config.json
 
 # fastlane
 copy fastlane/Gemfile      Gemfile
@@ -66,6 +78,8 @@ copy fastlane/metadata-locale.template.json fastlane/metadata/en-US.json
 
 echo
 echo "Done: $copied created, $skipped skipped."
-echo "Next: git grep -n '{{'   → fill placeholders"
-echo "      delete unused parts (no Data/ → remove data workflows, etc.)"
+echo "Next: scripts/update.sh <dir>   → fills the placeholders PES owns"
+echo "                                    (project name, owner/repo, firebase id)"
+echo "      git grep -n '{{'          → fill the rest by hand (fastlane, docs)"
+echo "      delete unused parts (no Data/ → remove the data jobs, etc.)"
 echo "      then follow MIGRATE.md"

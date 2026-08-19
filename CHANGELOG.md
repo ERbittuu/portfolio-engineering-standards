@@ -1,5 +1,53 @@
 # Changelog
 
+## [1.4.0] - 2026-08-20
+
+### Added
+- **Standard remote config.** `App/Source/Shared/SYSConfig.swift` is one shared
+  file, identical in every app — apps put their own values under the `app` key
+  rather than forking it. Each app ships `App/Resources/config.json` and serves
+  that same file from its Firebase Hosting, so a bundled copy and a served copy
+  cannot drift. At launch it loads locally (bundled, or a cached fetch with a
+  higher `configVersion`), then refreshes in the background for the next launch;
+  a fetched config never applies mid-session. No internet, malformed JSON, a
+  non-2xx response, or a config older than the one in hand all fall back
+  silently, so the app can never end up worse off than what shipped. The cache
+  lives in Application Support, not Caches, which the system may purge.
+  Standard keys: `update` (with force and recommended versions), `maintenance`
+  kill switch, `flags`, `rating`, `urls`, `content`, `crossPromo`. Messages take
+  either a bare string or a per-language map resolved against the device
+  language. Version comparison is numeric, never string — `"1.10.0"` sorts below
+  `"1.9.0"` as text, which works for years and then breaks at the first
+  double-digit minor.
+- `scripts/ci/validate_config.py` and a `validate-config` job in `pr.yml`.
+  Config reaches every user at once and they cannot roll it back, so it gets the
+  strictest check here: schema, required keys, version formats, and a refusal of
+  any `minimumVersion` above the version currently live on the App Store — that
+  combination blocks 100% of users with no version available to update to.
+- `scripts/update.sh [--check] <app-dir>` — brings an existing app up to the
+  current PES version. `setup.sh` never overwrites, which is right for a new
+  repo and useless for an existing one; that gap is why apps drifted silently
+  (one sat five workflows behind, another kept a non-standard `.gitignore` for
+  weeks). It rewrites only the files PES owns, re-renders placeholders from the
+  app itself so there is nothing to keep in sync by hand, and reports — but
+  never touches — app-owned files and workflows PES no longer ships.
+  `--check` changes nothing and is the intended first run.
+- `.pes-version` in each app, written by `setup.sh` and `update.sh`, so it is
+  finally possible to answer which apps are behind.
+
+### Removed
+- `.swiftformat` and its copy step. The config shipped to every app but nothing
+  ever ran SwiftFormat — not a workflow, not a script, not even the tool being
+  installed. It also carried `--header strip`, so switching it on would have
+  deleted the header comment from every source file. SwiftLint already covers
+  what matters.
+- `templates/docs/SECURITY.template.md`. `setup.sh` never copied it and no app
+  has ever had a SECURITY.md.
+
+### Changed
+- Dependabot also watches `bundler`. fastlane is what talks to App Store
+  Connect, so a stale pin breaks the store workflows when Apple changes an API.
+
 ## [1.3.0] - 2026-08-19
 
 ### Changed

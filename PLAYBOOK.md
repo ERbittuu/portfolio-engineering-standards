@@ -13,7 +13,8 @@ One private repo per app. Everything the app needs lives in it:
 my-app/
 ├── README.md  CHANGELOG.md
 ├── .gitignore .gitattributes .editorconfig
-├── .swiftlint.yml .swiftformat
+├── .swiftlint.yml
+├── .pes-version                 # which PES version this app is on (scripts/update.sh)
 ├── .env.example                 # documents every secret; real values never committed
 ├── firebase.json  .firebaserc   # must stay at root — Firebase CLI expects it here
 ├── .github/workflows/           # all automation
@@ -29,6 +30,7 @@ my-app/
 │   │                            #   it lives at Shared/AnalyticsManager.swift — the PR check greps
 │   │                            #   that exact path.
 │   ├── Resources/               # assets, xcstrings, PrivacyInfo, GoogleService-Info
+│   │                            #   config.json — remote config, shipped AND served
 │   ├── Config/                  # entitlements
 │   ├── Packages/                # local copies of all dependencies (see section 4)
 │   └── ci_scripts/              # must stay next to the .xcodeproj — Apple rule
@@ -245,14 +247,58 @@ Anything more (Firestore, RTDB, Functions) has to justify itself through
 [decisions/firebase-services.md](decisions/firebase-services.md) first —
 and then the separate dev/prod project rule applies.
 
-## 8. Git
+## 8. Remote config
+
+Every app ships `App/Resources/config.json` and serves that **same file** from
+its Firebase Hosting. One file, so a bundled copy and a served copy can never
+drift apart.
+
+`App/Source/Shared/SYSConfig.swift` is identical in every app and must not be
+forked. If an app already has its own config loader, replace it — two sources
+of truth for "is this flag on" is the bug this exists to prevent. App-specific
+values go under the `app` key and are read with `SYSConfig.shared.value(_:)`.
+
+At launch:
+
+```
+load()     bundled copy, or a cached fetch if its configVersion is higher
+refresh()  background fetch → validate → save → applies NEXT launch
+```
+
+A fetched config never applies mid-session, so values stay stable for a whole
+session and nothing changes under the user while they are using the app. No
+internet, malformed JSON, a non-2xx response, or a config older than the one in
+hand all fall back silently: the app can never end up worse off than the copy
+that shipped. The cache lives in Application Support rather than Caches, which
+the system may purge — that would quietly roll a user back to the bundled copy.
+
+The standard keys — `update`, `maintenance`, `flags`, `rating`, `urls`,
+`content`, `crossPromo` — are the same everywhere. `update.minimumVersion`
+drives `isUpdateRequired`; PES standardises the check and the comparison, not
+the blocking screen, which each app draws itself.
+
+Version comparison is numeric, never string: `"1.10.0"` sorts *below* `"1.9.0"`
+as a string, which works for years and then breaks at the first double-digit
+minor.
+
+`update.message` and `maintenance.message` accept either a bare string or a
+`{"en": …, "hi": …}` map, resolved against the device language with an English
+fallback.
+
+`pr.yml`'s `validate-config` job checks the schema on every PR that touches the
+file, and refuses a `minimumVersion` above the version currently live on the App
+Store — that combination blocks 100% of users with no version available to
+update to. It is the highest-blast-radius file in the repo and gets the
+strictest check.
+
+## 9. Git
 
 Trunk-based, one permanent branch (section 3). Squash merge only, branches
 auto-delete. Commit format: `type: what it does` with types
 feat/fix/chore/docs/refactor/test/ci. Secrets never in the repo. Private
 repos by default.
 
-## 9. Once per app
+## 10. Once per app
 
 - [ ] 2FA everywhere; ASC API key in password manager + repo secrets +
       Xcode Cloud Environment Variables (three separate places, same key)
@@ -263,7 +309,7 @@ repos by default.
 - [ ] Branch protection: enable it if the repo is public or on a paid
       plan; otherwise the PR checks are advisory only — know that going in
 
-## 10. Starting a NEW app (the complete recipe)
+## 11. Starting a NEW app (the complete recipe)
 
 MIGRATE.md is for moving an *existing* app onto this system; this is the
 from-scratch path. Every step is the same for every app — an app that
@@ -308,7 +354,7 @@ analytics guard) just deletes that part and nothing else changes.
    checks must produce a run. Then do a `release/0.1.0` dry run end to
    end (§5): branch → Xcode Cloud archive → TestFlight → merge → tag
    appears. Automation you haven't seen fire is not automation.
-9. Finish the §9 once-per-app checklist.
+9. Finish the §10 once-per-app checklist.
 
 ---
 
