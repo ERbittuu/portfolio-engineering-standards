@@ -46,6 +46,8 @@ MANAGED=(
   "App/Source/Shared/SYSConfig.swift"
   ".editorconfig"
   ".gitattributes"
+  ".githooks/pre-commit"
+  ".githooks/pre-push"
 )
 
 # Where each managed file comes from in templates/.
@@ -59,6 +61,7 @@ src_for() {
     App/Source/Shared/SYSConfig.swift) echo "app/SYSConfig.swift" ;;
     .editorconfig)           echo "assets/editorconfig" ;;
     .gitattributes)          echo "assets/gitattributes" ;;
+    .githooks/*)             echo "githooks/$(basename "$1")" ;;
     *) return 1 ;;
   esac
 }
@@ -183,6 +186,21 @@ for rel in .gitignore .swiftlint.yml; do
     echo "  DIFFERS $rel  (app-owned — check intentionally, not overwritten)"
   fi
 done
+
+# core.hooksPath is per-clone git config, not a file, so it cannot be copied —
+# it has to be set. A repo with .githooks/ but no hooksPath looks protected and
+# is not.
+if git -C "$TARGET" rev-parse --git-dir >/dev/null 2>&1; then
+  hooks_path="$(git -C "$TARGET" config core.hooksPath 2>/dev/null || true)"
+  if [[ "$hooks_path" != ".githooks" ]]; then
+    echo "  HOOKS   core.hooksPath is '${hooks_path:-unset}' — hooks are NOT active"
+    if [[ $CHECK -eq 0 ]]; then
+      git -C "$TARGET" config core.hooksPath .githooks
+      chmod +x "$TARGET"/.githooks/* 2>/dev/null || true
+      echo "  HOOKS   set core.hooksPath=.githooks"
+    fi
+  fi
+fi
 
 echo
 if [[ $CHECK -eq 1 ]]; then

@@ -341,14 +341,48 @@ product subsets — ABCLearning excludes Firebase Analytics because the Kids
 Category forbids third-party measurement SDKs — and overwriting that would be a
 store compliance problem introduced by automation you trusted.
 
-## 9. Git
+## 9. Git hooks
+
+On GitHub Free a private repo gets no branch protection, so every CI check
+reports and none of them block a merge (§4). Hooks are the only place where
+something can actually be stopped, so they cover the cases where finding out
+later is too late.
+
+Committed in `.githooks/` and activated with `core.hooksPath`, because
+`.git/hooks` is not versioned — without that config a clone silently has no
+hooks at all, which looks like protection and isn't. `setup.sh` and `update.sh`
+set it; `update.sh --check` reports when it is missing.
+
+**pre-commit**
+
+| Check | Why here rather than CI |
+|---|---|
+| files over 5MB | history is forever, and every future clone pays. One app has a vendored folder 300× the size of the same library elsewhere |
+| secrets (gitleaks) | a secret pushed to GitHub is compromised even if the branch is deleted a minute later. The CI guard only fires after that has happened |
+| remote SwiftPM packages | easy to reintroduce by accident when Xcode adds one through its UI |
+| `config.json` | it reaches every user at once |
+
+Skips the secret scan with a note when gitleaks isn't installed, rather than
+blocking work on a missing tool.
+
+**pre-push**
+
+| Check | Why |
+|---|---|
+| branch name | `release.yml` takes the tag straight from the branch name, so `release/v2.9.0` or `release/2.9` produce a wrong tag or none. Everything else is convention |
+| SYSKit tests | shared by every app, runs in about a second, needs no simulator |
+
+Both are escapable with `--no-verify`. A hook you cannot bypass gets uninstalled
+the first time it is wrong; one you can bypass gets kept.
+
+## 10. Git
 
 Trunk-based, one permanent branch (section 3). Squash merge only, branches
 auto-delete. Commit format: `type: what it does` with types
 feat/fix/chore/docs/refactor/test/ci. Secrets never in the repo. Private
 repos by default.
 
-## 10. Once per app
+## 11. Once per app
 
 - [ ] 2FA everywhere; ASC API key in password manager + repo secrets +
       Xcode Cloud Environment Variables (three separate places, same key)
@@ -359,7 +393,7 @@ repos by default.
 - [ ] Branch protection: enable it if the repo is public or on a paid
       plan; otherwise the PR checks are advisory only — know that going in
 
-## 11. Starting a NEW app (the complete recipe)
+## 12. Starting a NEW app (the complete recipe)
 
 MIGRATE.md is for moving an *existing* app onto this system; this is the
 from-scratch path. Every step is the same for every app — an app that
@@ -404,7 +438,7 @@ analytics guard) just deletes that part and nothing else changes.
    checks must produce a run. Then do a `release/0.1.0` dry run end to
    end (§5): branch → Xcode Cloud archive → TestFlight → merge → tag
    appears. Automation you haven't seen fire is not automation.
-9. Finish the §10 once-per-app checklist.
+9. Finish the §11 once-per-app checklist.
 
 ---
 

@@ -1,5 +1,27 @@
 # Changelog
 
+## [1.7.0] - 2026-08-20
+
+### Added
+- **Git hooks**, in `.githooks/` and activated via `core.hooksPath`. On GitHub
+  Free a private repo has no branch protection, so every CI check reports and
+  none of them block — hooks are the only place something can actually be
+  stopped, so they cover the cases where finding out later is too late.
+- `pre-push` validates the branch name. This is not style: `release.yml` takes
+  the tag straight from the branch name, so `release/v2.9.0` or `release/2.9`
+  produce a wrong tag or none at all. It also runs the SYSKit tests when that
+  package changed — about a second, no simulator.
+- `pre-commit` rejects files over 5MB (history is forever; one app carries a
+  vendored folder 300x the size of the same library elsewhere), scans for
+  secrets (a secret pushed to GitHub is compromised even if the branch is
+  deleted straight after — the CI guard only fires once that has happened),
+  blocks remote SwiftPM packages, and validates `config.json`.
+- Both are escapable with `--no-verify`, and the secret scan skips with a note
+  when gitleaks isn't installed rather than blocking work on a missing tool.
+- `update.sh` reports when `core.hooksPath` is unset and sets it when applying.
+  `.git/hooks` is not versioned, so a clone without that config silently has no
+  hooks — which looks like protection and is not.
+
 ## [1.6.0] - 2026-08-20
 
 ### Changed

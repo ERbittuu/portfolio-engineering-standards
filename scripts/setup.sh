@@ -59,6 +59,16 @@ for cs in ci_post_clone ci_pre_xcodebuild ci_post_xcodebuild; do
 done
 chmod +x "$TARGET"/App/ci_scripts/*.sh 2>/dev/null || true
 
+# Git hooks. Committed in .githooks and activated via core.hooksPath, because
+# .git/hooks is not versioned — otherwise every clone silently has no hooks.
+copy githooks/pre-commit  .githooks/pre-commit
+copy githooks/pre-push    .githooks/pre-push
+chmod +x "$TARGET"/.githooks/* 2>/dev/null || true
+if git -C "$TARGET" rev-parse --git-dir >/dev/null 2>&1; then
+  git -C "$TARGET" config core.hooksPath .githooks
+  echo "  config core.hooksPath=.githooks"
+fi
+
 # PR-check scripts (used by pr.yml's validate-screenshots / analytics guards)
 copy scripts/ci/validate_screenshots.py       scripts/ci/validate_screenshots.py
 copy scripts/ci/validate_analytics_events.py  scripts/ci/validate_analytics_events.py

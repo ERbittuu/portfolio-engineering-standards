@@ -1,0 +1,59 @@
+#!/usr/bin/env bash
+# PES pre-commit hook.
+#
+# On GitHub Free a private repo gets no branch protection, so CI checks report
+# but never block. These hooks are the only thing that actually stops something,
+# which is why the checks here are the ones where "caught later" is too late.
+#
+# Escape hatch: git commit --no-verify
+set -uo pipefail
+
+fail=0
+staged=$(git diff --cached --name-only --diff-filter=ACM)
+[ -z "$staged" ] && exit 0
+
+# 1. Large files. A secret can be rotated; a 300MB blob is in history forever and
+#    every future clone pays for it. One of our apps has a vendored folder 300x
+#    the size of the same library elsewhere — this is how that happens.
+MAX_BYTES=$((5 * 1024 * 1024))
+while IFS= read -r file; do
+  [ -f "$file" ] || continue
+  size=$(wc -c < "$file" | tr -d ' ')
+  if [ "$size" -gt "$MAX_BYTES" ]; then
+    echo "  ✗ $file is $((size / 1024 / 1024))MB (limit 5MB)" >&2
+    fail=1
+  fi
+done <<< "$staged"
+
+# 2. Secrets. A secret pushed to GitHub is compromised even if you delete the
+#    branch a minute later — it cannot be un-published. The CI guard catches it
+#    only after that has already happened.
+if command -v gitleaks >/dev/null 2>&1; then
+  if ! gitleaks protect --staged --no-banner --redact >/dev/null 2>&1; then
+    echo "  ✗ gitleaks found a secret in the staged changes" >&2
+    fail=1
+  fi
+else
+  echo "  · gitleaks not installed — secret scan skipped (brew install gitleaks)" >&2
+fi
+
+# 3. Remote packages. Everything vendors locally; this is easy to undo by
+#    accident when Xcode adds a package through its UI.
+if echo "$staged" | grep -q 'project.pbxproj'; then
+  if grep -q "isa = XCRemoteSwiftPackageReference" App/*.xcodeproj/project.pbxproj 2>/dev/null; then
+    echo "  ✗ project.pbxproj references a remote Swift package (PLAYBOOK §4)" >&2
+    fail=1
+  fi
+fi
+
+# 4. Config. It reaches every user at once, so a bad edit is worth catching at
+#    the keystroke rather than at merge.
+if echo "$staged" | grep -q 'App/Resources/config.json' && [ -f scripts/ci/validate_config.py ]; then
+  if ! python3 scripts/ci/validate_config.py >/dev/null 2>&1; then
+    echo "  ✗ config.json failed validation — run: python3 scripts/ci/validate_config.py" >&2
+    fail=1
+  fi
+fi
+
+[ "$fail" -eq 0 ] || echo "  commit blocked — fix the above, or bypass with --no-verify" >&2
+exit "$fail"
