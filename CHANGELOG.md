@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.5.1] - 2026-08-20
+
+### Fixed
+- `setup.sh` now ships `App/Source/Shared/AnalyticsManager.swift`. Without it a
+  freshly scaffolded app failed its own `analytics-event-guard` on the first PR:
+  that job runs on every PR with no path filter, and the validator errors when
+  the file is missing. It also left the shared `SYSAnalytics` half-shown, since
+  the manager needs an app-side event enum and nothing demonstrated one.
+  The template uses `case .x(let y)` — the form the validator can actually see.
+
 ## [1.5.0] - 2026-08-20
 
 ### Added

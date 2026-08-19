@@ -67,6 +67,10 @@ copy scripts/ci/validate_config.py            scripts/ci/validate_config.py
 # The config this app ships with and serves. SYSConfig itself lives in SYSKit.
 copy app/config.json      App/Resources/config.json
 
+# The app's analytics vocabulary. Fixed path — the PR check greps it, so a
+# scaffolded app without this file fails analytics-event-guard on its first PR.
+copy app/AnalyticsManager.swift  App/Source/Shared/AnalyticsManager.swift
+
 # SYSKit — the shared layer. Vendored as local packages, never fetched.
 for pkg in SYSKit SYSKitFirebase; do
   if [[ -e "$TARGET/App/Packages/$pkg" ]]; then
