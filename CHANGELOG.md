@@ -1,5 +1,19 @@
 # Changelog
 
+## [1.8.0] - 2026-08-20
+
+### Added
+- `scripts/status.sh` — one read-only table showing, for every app: the version
+  live on the App Store, the highest version merged to main, the newest tag, the
+  PES version it is on, how far it has drifted, and open PRs. All of it was
+  already discoverable and none of it was in one place, which took eight commands
+  across three tools to assemble — so nobody assembled it, and an app sitting
+  five workflows behind went unnoticed for weeks.
+- Live versions come from Apple's public lookup, so it needs no App Store
+  Connect key. TestFlight versions come from merged `release/*` PR head refs
+  rather than branch names, because release branches are deleted on merge and
+  ref names therefore miss every shipped version.
+
 ## [1.7.1] - 2026-08-20
 
 ### Added
