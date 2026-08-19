@@ -384,7 +384,7 @@ the first time it is wrong; one you can bypass gets kept.
 
 ## 10. This repo follows its own rules
 
-PES runs the hooks it ships (`.githooks`, `core.hooksPath`) and has its own CI:
+PES has its own CI:
 `validate.sh`, the SYSKit tests, and a scaffold job that builds a throwaway app
 from `setup.sh` and checks it passes its own PR checks.
 
@@ -392,6 +392,14 @@ That last job exists because it has already failed: a scaffolded app had no
 `AnalyticsManager.swift` while the guard for it ran on every PR, so every new app
 was red from its first commit. A standards repo without CI is a standards repo
 whose rules are advisory.
+
+Its hooks are its own, **not** the app template. The app hooks check
+`App/Packages`, `App/Resources/config.json`, `App/*.xcodeproj` and `App/Source` —
+none of which exist here, so installing them verbatim produced five no-ops
+wearing the costume of protection, while the one check that mattered silently did
+nothing because the package lives at `SPM/SYSKit` rather than
+`App/Packages/SYSKit`. Self-applying a standard only means something where the
+standard actually applies.
 
 ## 11. Git
 

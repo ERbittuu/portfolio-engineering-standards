@@ -35,12 +35,13 @@ jobs:
   # the cheapest to test: no dependencies, no simulator, no Xcode.
   syskit-tests:
     runs-on: ubuntu-latest
+    # Official Swift image rather than a third-party setup action, which 404'd
+    # on its first run here. SYSKit imports os only behind canImport, so it
+    # builds on Linux — which is what keeps this off a 10x-cost macOS runner.
+    container: swift:5.9
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
-      - uses: swift-actions/setup-swift@v2
-        with:
-          swift-version: "5.9"
       - name: Run SYSKit tests
         working-directory: SPM/SYSKit
         run: swift test

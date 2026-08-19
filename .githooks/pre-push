@@ -1,46 +1,29 @@
-#!/usr/bin/env bash
-# PES pre-push hook.
+#!/bin/sh
+# PES's own pre-push.
 #
-# Escape hatch: git push --no-verify
-set -uo pipefail
-
-branch=$(git rev-parse --abbrev-ref HEAD)
+# The app template tests App/Packages/SYSKit; here the package lives at
+# SPM/SYSKit, so the app hook would have silently tested nothing. It also
+# enforces release/X.Y.Z branch names, which do not apply — PES releases from
+# main via scripts/release.sh, not release branches.
+#
+# Bypass (deliberately): git push --no-verify
+set -u
 fail=0
 
-# 1. Branch name. This is not style: release.yml reads the version straight out
-#    of the branch name to create a permanent tag, so "release/v2.9.0" or
-#    "Release/2.9.0" produce a wrong tag or none at all. Everything else is
-#    convention, and worth keeping consistent so the history reads cleanly.
-case "$branch" in
-  main) ;;
-  release/*)
-    version="${branch#release/}"
-    if ! printf '%s' "$version" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$'; then
-      echo "  ✗ '$branch' must be release/X.Y.Z — release.yml takes the tag from this name" >&2
-      echo "    (no leading v, three numeric parts)" >&2
-      fail=1
-    fi
-    ;;
-  code/*|data/*|metadata/*|feat/*|fix/*|chore/*|ci/*|docs/*) ;;
-  *)
-    echo "  ✗ '$branch' does not match the convention (PLAYBOOK §3)" >&2
-    echo "    use: code/ data/ metadata/ feat/ fix/ chore/ ci/ docs/ or release/X.Y.Z" >&2
-    fail=1
-    ;;
-esac
+# The repo's own consistency check: VERSION/CHANGELOG/README agreement, and
+# every template parsing. It found real drift before anything ran it.
+if [ -f scripts/validate.sh ]; then
+  sh scripts/validate.sh >/dev/null 2>&1 || {
+    echo "✗ validate.sh fails — run: bash scripts/validate.sh"; fail=1; }
+fi
 
-# 2. SYSKit tests. Shared by every app, so a break here lands in all of them.
-#    Runs in about a second and needs no simulator, so there is no reason to
-#    find out from CI instead.
-if [ -d App/Packages/SYSKit ] && command -v swift >/dev/null 2>&1; then
-  if ! git diff --quiet origin/main...HEAD -- App/Packages/SYSKit 2>/dev/null; then
-    echo "  · running SYSKit tests…" >&2
-    if ! (cd App/Packages/SYSKit && swift test >/dev/null 2>&1); then
-      echo "  ✗ SYSKit tests failed" >&2
-      fail=1
-    fi
+# SYSKit ships to every app, so a break here lands in all of them.
+if [ -d SPM/SYSKit ] && command -v swift >/dev/null 2>&1; then
+  if ! git diff --quiet origin/main...HEAD -- SPM/SYSKit 2>/dev/null; then
+    echo "· running SYSKit tests…"
+    (cd SPM/SYSKit && swift test >/dev/null 2>&1) || { echo "✗ SYSKit tests failed"; fail=1; }
   fi
 fi
 
-[ "$fail" -eq 0 ] || echo "  push blocked — fix the above, or bypass with --no-verify" >&2
+[ "$fail" -eq 0 ] || echo "  push blocked — fix the above, or bypass with --no-verify"
 exit "$fail"

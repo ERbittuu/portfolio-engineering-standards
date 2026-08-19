@@ -143,6 +143,7 @@ jobs:
   # simulator, a few seconds.
   syskit-tests:
     runs-on: ubuntu-latest
+    container: swift:5.9
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7
@@ -153,11 +154,6 @@ jobs:
           filters: |
             syskit:
               - 'App/Packages/SYSKit/**'
-
-      - uses: swift-actions/setup-swift@v2
-        if: steps.changes.outputs.syskit == 'true'
-        with:
-          swift-version: "5.9"
 
       - name: Run SYSKit tests
         if: steps.changes.outputs.syskit == 'true'

@@ -1,5 +1,7 @@
 import Foundation
+#if canImport(os)
 import os
+#endif
 
 /// Logging that stays quiet in release and reports real failures.
 ///
@@ -26,7 +28,9 @@ public enum SYSLogger {
     /// Receives non-fatal errors. Set once at launch; nil means log-only.
     public static var reporter: SYSErrorReporter?
 
+    #if canImport(os)
     private static let log = Logger(subsystem: Bundle.main.bundleIdentifier ?? "app", category: "SYSKit")
+    #endif
 
     public static func debug(_ message: @autoclosure () -> String) { emit(.debug, message()) }
     public static func info(_ message: @autoclosure () -> String) { emit(.info, message()) }
@@ -47,12 +51,19 @@ public enum SYSLogger {
 
     private static func emit(_ level: Level, _ message: String) {
         guard level >= minimumLevel else { return }
+        // os.Logger is Apple-only. Falling back to print keeps SYSKit buildable
+        // and testable on Linux, which is what lets its tests run on a cheap CI
+        // runner instead of a macOS one.
+        #if canImport(os)
         switch level {
         case .debug: log.debug("\(message, privacy: .public)")
         case .info: log.info("\(message, privacy: .public)")
         case .warning: log.warning("\(message, privacy: .public)")
         case .error: log.error("\(message, privacy: .public)")
         }
+        #else
+        print("[\(level)] \(message)")
+        #endif
     }
 }
 
