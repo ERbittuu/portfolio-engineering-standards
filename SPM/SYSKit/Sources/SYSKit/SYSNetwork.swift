@@ -1,4 +1,10 @@
 import Foundation
+// URLSession and HTTPURLResponse live in FoundationNetworking on Linux, not
+// Foundation. Without this SYSKit builds on Apple platforms and fails on the
+// Linux runner its tests are meant to be cheap on.
+#if canImport(FoundationNetworking)
+import FoundationNetworking
+#endif
 
 public enum SYSNetworkError: Error, Equatable {
     case badURL
