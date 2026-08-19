@@ -43,8 +43,7 @@ copy github/ISSUE_TEMPLATE/config.yml          .github/ISSUE_TEMPLATE/config.yml
 copy github/dependabot.yml                     .github/dependabot.yml
 
 # workflows (delete the ones the app doesn't use)
-for wf in ci-data deploy-data store-metadata store-screenshots \
-          lint pr-guards validate-metadata validate-screenshots validate-release release-merge; do
+for wf in pr main release; do
   copy "workflows/$wf.yml" ".github/workflows/$wf.yml"
 done
 
@@ -54,7 +53,7 @@ for cs in ci_post_clone ci_pre_xcodebuild ci_post_xcodebuild; do
 done
 chmod +x "$TARGET"/App/ci_scripts/*.sh 2>/dev/null || true
 
-# PR-check scripts (used by validate-screenshots.yml / pr-guards.yml)
+# PR-check scripts (used by pr.yml's validate-screenshots / analytics guards)
 copy scripts/ci/validate_screenshots.py       scripts/ci/validate_screenshots.py
 copy scripts/ci/validate_analytics_events.py  scripts/ci/validate_analytics_events.py
 

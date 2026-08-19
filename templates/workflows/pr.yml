@@ -1,0 +1,254 @@
+# Every PR check, in one workflow.
+#
+# One file, many jobs — deliberately. GitHub reports a status per *job*, so
+# this shows the same individual checks a file-per-check layout does, while
+# keeping the boilerplate (triggers, permissions, concurrency) in one place
+# and giving one file to keep in sync across apps instead of five.
+#
+# Triggers are never path-filtered. A path-filtered *trigger* is a trap for
+# any check you want to treat as required: a PR that never touches those
+# paths never gets a check run at all, so the check silently reports
+# nothing. Instead every job runs and skips its own work via
+# dorny/paths-filter when nothing relevant changed.
+#
+# Each guard here exists because of something that actually happened on a
+# real app running this system — see MIGRATE.md's gotcha table.
+name: PR
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+  pull-requests: read   # dorny/paths-filter needs this to list changed files
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ── Style ────────────────────────────────────────────────────────────────
+  # SwiftLint on our own code. App/Packages is vendored third-party source
+  # and is never linted — see .swiftlint.yml's excluded list.
+  swiftlint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: dorny/paths-filter@v3
+        id: changes
+        with:
+          filters: |
+            swift:
+              - 'App/**/*.swift'
+
+      - name: Install SwiftLint
+        if: steps.changes.outputs.swift == 'true'
+        run: |
+          curl -sSL -o swiftlint.zip \
+            https://github.com/realm/SwiftLint/releases/download/0.65.0/swiftlint_linux_amd64.zip
+          unzip -q swiftlint.zip -d swiftlint-bin
+
+      # Not --strict on a fresh migration: an app moving onto this system
+      # brings its own pre-existing style debt, and failing every PR on
+      # day one over unrelated legacy warnings just trains you to ignore
+      # this check. Flip to --strict once the backlog is clean.
+      - name: Run SwiftLint
+        if: steps.changes.outputs.swift == 'true'
+        run: ./swiftlint-bin/swiftlint lint App/Source
+
+  # ── Guards ───────────────────────────────────────────────────────────────
+  # No secrets committed — private repos don't get GitHub's free secret
+  # scanning automatically. Scans the working tree at HEAD, not per-commit
+  # history: every PR here squash-merges, so only the final combined diff
+  # ever lands on main, and scanning per-commit flags things a later
+  # commit in the same PR already fixed.
+  secret-scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install gitleaks
+        run: |
+          curl -sSL -o gitleaks.tar.gz \
+            https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_linux_x64.tar.gz
+          tar -xzf gitleaks.tar.gz gitleaks
+
+      - name: Scan working tree for secrets
+        run: ./gitleaks detect --source . --no-banner --redact --no-git
+
+  # Zero remote packages, ever (PLAYBOOK §4) — builds must not depend on
+  # someone else's server. This is what stops it from quietly regressing
+  # the next time a package gets added through Xcode's UI.
+  dependency-guard:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: No remote Swift packages in the project
+        run: |
+          if grep -q "isa = XCRemoteSwiftPackageReference" App/*.xcodeproj/project.pbxproj; then
+            echo "::error::project.pbxproj references a remote Swift package — everything vendors locally (PLAYBOOK.md §4)"
+            exit 1
+          fi
+
+      - name: No committed Package.resolved
+        run: |
+          FOUND=$(find . -name "Package.resolved" -not -path "*/.build/*")
+          if [ -n "$FOUND" ]; then
+            echo "::error::Package.resolved found — dependencies must resolve to local vendored packages only"
+            echo "$FOUND"
+            exit 1
+          fi
+
+  # {{ OPTIONAL — delete this job if the app has no GoogleService-Info.plist,
+  #    or adapt the key/value pair to whatever config flag has bitten you.
+  #    This exact check would have caught IS_ANALYTICS_ENABLED sitting at
+  #    false on a real app for an unknown stretch of time, silently
+  #    dropping every analytics event with no error anywhere. }}
+  firebase-config-guard:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: IS_ANALYTICS_ENABLED must be true
+        run: |
+          python3 -c "
+          import plistlib
+          with open('App/Resources/GoogleService-Info.plist', 'rb') as f:
+              data = plistlib.load(f)
+          assert data.get('IS_ANALYTICS_ENABLED') is True, 'IS_ANALYTICS_ENABLED must be true'
+          "
+
+  # {{ OPTIONAL — only relevant if you adopt the AnalyticsManager pattern
+  #    from PLAYBOOK §7 (one enum, one file, name+parameters per case).
+  #    Firebase silently DROPS events/params that violate its own limits
+  #    instead of erroring, so this catches that class of bug at PR time
+  #    instead of quietly losing data in production. See
+  #    scripts/ci/validate_analytics_events.py. }}
+  analytics-event-guard:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+      - run: python3 scripts/ci/validate_analytics_events.py
+
+  # ── Store content ────────────────────────────────────────────────────────
+  # Does fastlane/metadata/ have any of the landmines listed in MIGRATE.md's
+  # gotcha table? Emoji in release notes, "UPDATE THIS" placeholders,
+  # over-limit fields, unsupported locales. No network call — see the
+  # Fastfile's validate_metadata lane.
+  validate-metadata:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: dorny/paths-filter@v3
+        id: changes
+        with:
+          filters: |
+            metadata:
+              - 'fastlane/metadata/**'
+              - 'fastlane/Deliverfile'
+
+      - uses: ruby/setup-ruby@v1
+        if: steps.changes.outputs.metadata == 'true'
+        with:
+          ruby-version: "3.3"
+          bundler-cache: true
+
+      - if: steps.changes.outputs.metadata == 'true'
+        run: bundle exec fastlane validate_metadata
+
+  # Exact pixel dimensions per device class, complete locale sets, no
+  # corrupt files. See scripts/ci/validate_screenshots.py — update the
+  # REQUIRED dict there to match the device sizes you actually ship.
+  validate-screenshots:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: dorny/paths-filter@v3
+        id: changes
+        with:
+          filters: |
+            screenshots:
+              - 'fastlane/screenshots/**'
+
+      - if: steps.changes.outputs.screenshots == 'true'
+        run: python3 scripts/ci/validate_screenshots.py
+
+  # ── Content pipeline ─────────────────────────────────────────────────────
+  # {{ OPTIONAL — delete this job if the app ships no remote content.
+  #    If the data build succeeds, the source data and generated manifest
+  #    are structurally sound. }}
+  data-ci:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: dorny/paths-filter@v3
+        id: changes
+        with:
+          filters: |
+            data:
+              - 'Data/**'
+
+      - name: Build data bundles
+        if: steps.changes.outputs.data == 'true'
+        run: cd Data && python3 build.py --clean --verbose
+
+  # ── Release readiness ────────────────────────────────────────────────────
+  # Scoped to release/* branches: does CHANGELOG have a section for this
+  # version, and is the version actually higher than the last one shipped?
+  # Both guard the one moment that creates a permanent, unmovable tag (see
+  # release.yml) — catches typos and stale CHANGELOG entries before that tag
+  # ever gets created. Skips (passes trivially) on any other branch.
+  validate-release:
+    if: startsWith(github.head_ref, 'release/') && github.base_ref == 'main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0   # need full tag history for the version check
+
+      - name: Check branch name shape
+        run: |
+          BRANCH="${{ github.head_ref }}"
+          VERSION="${BRANCH#release/}"
+
+          case "$VERSION" in
+            [0-9]*.[0-9]*.[0-9]*) ;;
+            *)
+              echo "::error::branch '$BRANCH' doesn't match release/X.Y.Z"
+              exit 1
+              ;;
+          esac
+
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+
+      - name: Verify version is newer than the latest tag
+        run: |
+          LATEST=$(git tag -l 'v*' | sed 's/^v//' | sort -V | tail -1)
+          if [ -n "$LATEST" ]; then
+            HIGHEST=$(printf '%s\n%s\n' "$LATEST" "$VERSION" | sort -V | tail -1)
+            if [ "$VERSION" = "$LATEST" ] || [ "$HIGHEST" != "$VERSION" ]; then
+              echo "::error::release/$VERSION is not newer than the latest shipped version, v$LATEST"
+              exit 1
+            fi
+          fi
+
+      - name: Verify CHANGELOG has a section for this version
+        run: |
+          grep -q "^## \[$VERSION\]" CHANGELOG.md || {
+            echo "::error::CHANGELOG.md has no '## [$VERSION]' section — add it before merging."
+            exit 1
+          }

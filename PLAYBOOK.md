@@ -57,7 +57,7 @@ too, not buried in one app's history.
 |---|---|
 | GitHub | Everything starts here — push a branch, open a PR, merge it |
 | GitHub Actions (Ubuntu) | PR checks, data deploy, store metadata, store screenshots, tagging a shipped release |
-| Xcode Cloud (Apple Macs) | Build the app. CI on pushes/PRs, TestFlight archives on release branches |
+| Xcode Cloud (Apple Macs) | One job: archive release branches to TestFlight. Nothing else runs there |
 | Me | Write code, review my own PRs, merge, test on device, press Submit |
 
 Nothing runs on my Mac for a release. My Mac is for writing code.
@@ -67,18 +67,18 @@ minus the ones marked optional that don't apply:
 
 | Automation | Where | Trigger | Does |
 |---|---|---|---|
-| `lint.yml` | GH Actions | every PR | SwiftLint over own source (never vendored packages) |
-| `pr-guards.yml` | GH Actions | every PR | secret scan, remote-dependency guard, Firebase config guard, analytics-event guard (§4) |
-| `validate-metadata.yml` | GH Actions | every PR | store-text rules that Apple rejects (skips if metadata untouched) |
-| `validate-screenshots.yml` | GH Actions | every PR | pixel dimensions, locale completeness (skips if screenshots untouched) |
-| `validate-release.yml` | GH Actions | PRs from `release/*` | CHANGELOG section exists, version newer than last tag |
-| `release-merge.yml` | GH Actions | release branch merges to main | creates the `vX.Y.Z` tag + GitHub Release from CHANGELOG |
-| `store-metadata.yml` | GH Actions | merge touches `fastlane/metadata` | pushes store text (never screenshots) |
-| `store-screenshots.yml` | GH Actions | merge touches `fastlane/screenshots` | checksum-syncs screenshots (never text) |
-| `ci-data.yml` *(optional)* | GH Actions | PR touches `Data/` | rebuilds + validates content |
-| `deploy-data.yml` *(optional)* | GH Actions | merge touches `Data/` | deploys to Firebase Hosting + live smoke test |
-| `CI` workflow | Xcode Cloud | push/PR touching `App/` | simulator build of the app |
-| `Release` workflow | Xcode Cloud | push to `release/*` | archive → TestFlight; pre/post scripts in `App/ci_scripts/` stamp the version, fetch the ASC build number, upload dSYMs |
+| `pr.yml` | GH Actions | every PR | Nine jobs: `swiftlint`, `secret-scan`, `dependency-guard`, `firebase-config-guard`, `analytics-event-guard`, `validate-metadata`, `validate-screenshots`, `data-ci` *(optional)*, `validate-release` |
+| `main.yml` | GH Actions | merge to main | Three path-gated jobs: `store-metadata` (text only), `store-screenshots` (images only), `deploy-data` *(optional)*. Manual button takes a `job` input to run one on its own |
+| `release.yml` | GH Actions | release branch merges to main | creates the `vX.Y.Z` tag + GitHub Release from CHANGELOG |
+| `Release` workflow | Xcode Cloud | push to `release/*` | archive → TestFlight; scripts in `App/ci_scripts/` stamp the marketing version and upload dSYMs |
+
+Three workflow files, not one per check. GitHub reports a status per *job*,
+so the checks stay individually visible while the triggers, permissions and
+concurrency boilerplate live in one place — and one file per stage is one
+file to keep in sync across apps instead of ten. Xcode Cloud runs a single
+Release workflow: a CI workflow there would compile pull requests, but its
+results never appear in `gh pr checks`, so it bought verification you had to
+go to App Store Connect to read.
 | dependabot | GitHub | weekly | bundler + actions version PRs |
 
 ## 3. Branches
@@ -111,11 +111,19 @@ you.
 
 | Check | Runs on | Catches |
 |---|---|---|
-| `lint.yml` | any PR, skips if no `.swift` changed | SwiftLint, non-strict (a fresh migration inherits style debt — don't fail day-one PRs over it) |
-| `validate-metadata.yml` | any PR, skips if `fastlane/metadata/` unchanged | Every App Store rejection worth catching before merge: emoji, placeholder text, over-limit fields, unsupported locales |
-| `validate-screenshots.yml` | any PR, skips if `fastlane/screenshots/` unchanged | Wrong pixel dimensions, incomplete locale sets, corrupt files |
-| `validate-release.yml` | any PR, skips unless it's from a `release/*` branch | CHANGELOG has a section for this version; the version is actually newer than the last tag |
-| `pr-guards.yml` | every PR, always | Four jobs. Always: secret scan (gitleaks, working tree at HEAD), remote-dependency guard (no `XCRemoteSwiftPackageReference` ever). If the app has a `GoogleService-Info.plist`: `firebase-config-guard` asserting `IS_ANALYTICS_ENABLED` is true — this exact flag has shipped as `false` on three of four apps, silently dropping every event. If the app has the analytics-enum pattern (§7): `analytics-event-guard` running `scripts/ci/validate_analytics_events.py` |
+All of these are jobs inside `pr.yml`.
+
+| Job | Runs on | Catches |
+|---|---|---|
+| `swiftlint` | any PR, skips if no `.swift` changed | SwiftLint, non-strict (a fresh migration inherits style debt — don't fail day-one PRs over it) |
+| `secret-scan` | every PR, always | Committed secrets (gitleaks, working tree at HEAD) — private repos don't get GitHub's free scanning |
+| `dependency-guard` | every PR, always | Any `XCRemoteSwiftPackageReference`, and any committed `Package.resolved` |
+| `firebase-config-guard` | every PR, always *(if the app has a `GoogleService-Info.plist`)* | `IS_ANALYTICS_ENABLED` set to false — this exact flag has shipped as `false` on three of four apps, silently dropping every event |
+| `analytics-event-guard` | every PR, always *(if the app has the §7 analytics enum)* | Event/param names Firebase would silently drop |
+| `validate-metadata` | any PR, skips if `fastlane/metadata/` unchanged | Every App Store rejection worth catching before merge: emoji, placeholder text, over-limit fields, unsupported locales |
+| `validate-screenshots` | any PR, skips if `fastlane/screenshots/` unchanged | Wrong pixel dimensions, incomplete locale sets, corrupt files |
+| `data-ci` *(optional)* | any PR, skips if `Data/` unchanged | Content that doesn't build — source data and manifest structurally sound |
+| `validate-release` | any PR, skips unless it's from a `release/*` branch | CHANGELOG has a section for this version; the version is actually newer than the last tag |
 
 The "skip rather than don't-trigger" pattern matters: a workflow that's
 *path-filtered at the trigger level* never produces a check run at all
@@ -206,7 +214,7 @@ one build.
 ## 7. Firebase
 
 Hosting serves the content that `Data/build.py` produces (zips +
-manifest.json; short cache for JSON, longer for zips). `deploy-data.yml`
+manifest.json; short cache for JSON, longer for zips). `main.yml`'s `deploy-data` job
 smoke-tests the live manifest and one sample bundle right after every
 deploy — the blast radius of a broken deploy is every app install, so
 catching it before a user does is worth the ten extra seconds.
@@ -257,7 +265,7 @@ analytics guard) just deletes that part and nothing else changes.
    `@main` file in `Source/App/`.
 2. **Repo.** `git init -b main`, run PES `scripts/setup.sh`, fill every
    `{{PLACEHOLDER}}` (`git grep '{{'`), delete what the app doesn't use:
-   no remote content → delete `ci-data.yml` + `deploy-data.yml`; no
+   no remote content → delete the `data-ci` and `deploy-data` jobs; no
    AnalyticsManager enum → delete the `analytics-event-guard` job +
    `scripts/ci/validate_analytics_events.py`. Set `store_locales` in the
    Fastfile + `languages()` in the Deliverfile + `STORE_LOCALES` in

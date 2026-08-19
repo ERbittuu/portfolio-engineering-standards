@@ -60,5 +60,5 @@ bundle exec fastlane validate_metadata   # parse-only store text check
 
 Branch `release/X.Y.Z` off main → add CHANGELOG section → push (Xcode
 Cloud archives from the branch, TestFlight) → merge PR to main →
-`release-merge.yml` creates the `vX.Y.Z` tag + GitHub Release. Tags
+`release.yml` creates the `vX.Y.Z` tag + GitHub Release. Tags
 never trigger anything.

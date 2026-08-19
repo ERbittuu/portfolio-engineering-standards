@@ -7,9 +7,8 @@
 #
 # Store metadata push is NOT handled here — it's fully independent,
 # already triggered by any merge touching fastlane/metadata/** (see
-# validate-metadata / the metadata push workflow), whether or not that
-# merge came from a release branch.
-name: Release Merge
+# main.yml), whether or not that merge came from a release branch.
+name: Release
 
 on:
   pull_request:
@@ -41,7 +40,7 @@ jobs:
       - name: Verify CHANGELOG has a section for this version
         run: |
           grep -q "^## \[$VERSION\]" CHANGELOG.md || {
-            echo "::error::CHANGELOG.md has no '## [$VERSION]' section — this should have been caught before merge (see validate-release.yml)."
+            echo "::error::CHANGELOG.md has no '## [$VERSION]' section — this should have been caught before merge (see pr.yml's validate-release job)."
             exit 1
           }
 

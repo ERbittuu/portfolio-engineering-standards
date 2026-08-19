@@ -1,0 +1,171 @@
+# Everything that runs after a merge to main.
+#
+# One file, three independent jobs — each gated on the paths that concern
+# it, so a metadata merge never touches screenshots and a data merge never
+# touches either. Combining the *push* of text and screenshots into one
+# fastlane call is what double-uploads (MIGRATE.md gotchas); separate jobs
+# calling separate lanes keeps that separation intact.
+#
+# The manual button takes a `job` input so you can still run one of these
+# on its own, exactly as the separate workflows allowed.
+name: Main
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "fastlane/metadata/**"
+      - "fastlane/Deliverfile"
+      - "fastlane/screenshots/**"
+      - "Data/**"
+      - "firebase.json"
+  workflow_dispatch:
+    inputs:
+      job:
+        description: "Which job to run"
+        type: choice
+        default: all
+        options: [all, metadata, screenshots, data]
+
+permissions:
+  contents: read
+
+jobs:
+  # Which paths changed. On workflow_dispatch there is no diff to inspect,
+  # so the `job` input decides instead.
+  changes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      metadata: ${{ steps.decide.outputs.metadata }}
+      screenshots: ${{ steps.decide.outputs.screenshots }}
+      data: ${{ steps.decide.outputs.data }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: dorny/paths-filter@v3
+        id: filter
+        if: github.event_name == 'push'
+        with:
+          filters: |
+            metadata:
+              - 'fastlane/metadata/**'
+              - 'fastlane/Deliverfile'
+            screenshots:
+              - 'fastlane/screenshots/**'
+            data:
+              - 'Data/**'
+              - 'firebase.json'
+
+      - name: Decide what to run
+        id: decide
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            WANT="${{ inputs.job }}"
+            for j in metadata screenshots data; do
+              if [ "$WANT" = "all" ] || [ "$WANT" = "$j" ]; then
+                echo "$j=true" >> "$GITHUB_OUTPUT"
+              else
+                echo "$j=false" >> "$GITHUB_OUTPUT"
+              fi
+            done
+          else
+            echo "metadata=${{ steps.filter.outputs.metadata }}" >> "$GITHUB_OUTPUT"
+            echo "screenshots=${{ steps.filter.outputs.screenshots }}" >> "$GITHUB_OUTPUT"
+            echo "data=${{ steps.filter.outputs.data }}" >> "$GITHUB_OUTPUT"
+          fi
+
+  # Push App Store metadata (TEXT ONLY) to App Store Connect.
+  store-metadata:
+    needs: changes
+    if: needs.changes.outputs.metadata == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    concurrency:
+      group: store-metadata
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.3"
+          bundler-cache: true
+
+      - name: Push metadata to App Store Connect
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_KEY_CONTENT: ${{ secrets.ASC_KEY_CONTENT }}
+        run: bundle exec fastlane metadata
+
+  # Sync screenshots (IMAGES ONLY) to App Store Connect.
+  store-screenshots:
+    needs: changes
+    if: needs.changes.outputs.screenshots == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    concurrency:
+      group: store-screenshots
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.3"
+          bundler-cache: true
+
+      - name: Sync screenshots to App Store Connect
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_KEY_CONTENT: ${{ secrets.ASC_KEY_CONTENT }}
+        run: bundle exec fastlane screenshots
+
+  # {{ OPTIONAL — delete this job if the app ships no remote content.
+  #    Deploys to Firebase Hosting. Secret: FIREBASE_SERVICE_ACCOUNT
+  #    (Hosting Admin role only). Rollback: `firebase hosting:rollback`. }}
+  deploy-data:
+    needs: changes
+    if: needs.changes.outputs.data == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    concurrency:
+      group: deploy-data
+      cancel-in-progress: false   # never cancel a deploy midway
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Build data bundles
+        run: cd Data && python3 build.py --clean
+
+      - name: Deploy to Firebase Hosting
+        uses: FirebaseExtended/action-hosting-deploy@v0
+        with:
+          repoToken: ${{ github.token }}
+          firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          projectId: "{{FIREBASE_PROJECT_ID}}"
+          channelId: live
+
+      # Every app install hits this immediately after deploy — catches the
+      # "file exists in the repo but Hosting isn't actually serving it"
+      # class of bug before real users do, given the blast radius here.
+      # Adjust the manifest path and the JSON key for your own index file.
+      - name: Smoke test — live manifest and one item bundle are reachable
+        run: |
+          BASE="https://{{FIREBASE_PROJECT_ID}}.web.app"
+          MANIFEST=$(curl -sSf "$BASE/manifest.json")
+          echo "$MANIFEST" | python3 -c "import json,sys; json.load(sys.stdin)" || {
+            echo "::error::manifest.json at $BASE is not valid JSON"
+            exit 1
+          }
+
+          BUNDLE_PATH=$(echo "$MANIFEST" | python3 -c "import json,sys; print(json.load(sys.stdin)['items'][0]['bundle'])")
+          BUNDLE_PATH="${BUNDLE_PATH#/}"
+          curl -sSfI "$BASE/$BUNDLE_PATH" > /dev/null || {
+            echo "::error::sample item bundle $BASE/$BUNDLE_PATH is not reachable"
+            exit 1
+          }
+
+          echo "Smoke test passed: manifest.json valid, sample bundle ($BUNDLE_PATH) reachable"

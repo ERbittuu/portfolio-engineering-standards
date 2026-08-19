@@ -2,6 +2,21 @@
 
 ## [1.3.0] - 2026-08-19
 
+### Changed
+- **Ten workflow files consolidated into three**: `pr.yml` (every PR check as
+  a separate job), `main.yml` (store metadata, store screenshots, data deploy
+  — each path-gated), `release.yml` (tag + GitHub Release). GitHub reports a
+  status per job, so the same individual checks stay visible; what goes away
+  is nine copies of the same trigger/permissions/concurrency boilerplate and
+  ten files to keep in sync per app. `main.yml`'s manual button takes a `job`
+  input so the three merge-time jobs can still be run individually, as the
+  separate workflows allowed.
+- **Xcode Cloud runs one workflow, `Release`.** The CI workflow is gone: it
+  compiled pull requests, but its results never appear in `gh pr checks`, so
+  it was verification you had to open App Store Connect to read. Compile
+  errors now surface on the release branch. Nothing in `ci_scripts/` changes —
+  both hooks were already gated on `CI_XCODEBUILD_ACTION = archive`.
+
 ### Removed
 - `templates/ci_scripts/lib/asc_build_number.rb` and its call from
   `ci_pre_xcodebuild.sh`. It authenticated to App Store Connect to compute a
