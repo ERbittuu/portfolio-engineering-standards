@@ -17,6 +17,21 @@
   errors now surface on the release branch. Nothing in `ci_scripts/` changes —
   both hooks were already gated on `CI_XCODEBUILD_ACTION = archive`.
 
+### Changed
+- **Releases merge after Apple approves, not before** (PLAYBOOK §5, MIGRATE §7).
+  A tag now exists only for a version that actually reached users, so the newest
+  tag answers "what is live?", and a rejected build leaves nothing behind. It
+  also removes the window where content deployed while the build that understood
+  it was still in review. Previously the merge happened first, which is how one
+  app ended up merging the same release branch three times after rejections.
+- `main.yml`'s `store-metadata` and `store-screenshots` also run on `release/*`
+  pushes, so App Store text and screenshots are in place before you submit.
+  `deploy-data` stays main-only, deliberately: content goes live the moment it
+  deploys, with no review in between.
+- `release.yml` verifies the release and tag exist after creating them. A green
+  step is not proof — this reported success while leaving no tag and no release
+  behind on a real app.
+
 ### Removed
 - `templates/ci_scripts/lib/asc_build_number.rb` and its call from
   `ci_pre_xcodebuild.sh`. It authenticated to App Store Connect to compute a

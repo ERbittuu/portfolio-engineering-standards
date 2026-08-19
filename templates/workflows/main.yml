@@ -1,4 +1,4 @@
-# Everything that runs after a merge to main.
+# Store and content pushes.
 #
 # One file, three independent jobs — each gated on the paths that concern
 # it, so a metadata merge never touches screenshots and a data merge never
@@ -6,13 +6,21 @@
 # fastlane call is what double-uploads (MIGRATE.md gotchas); separate jobs
 # calling separate lanes keeps that separation intact.
 #
+# Branch rules differ per job, and that difference is the point (PLAYBOOK §5):
+#   - metadata + screenshots also run on release/* pushes, because App Store
+#     text has to be in App Store Connect BEFORE you submit — and the merge
+#     to main now happens after Apple approves, which would be far too late.
+#   - deploy-data runs on main only. Content goes live the instant it
+#     deploys, with no review in between, so it must wait until the build
+#     that understands it is actually approved.
+#
 # The manual button takes a `job` input so you can still run one of these
 # on its own, exactly as the separate workflows allowed.
 name: Main
 
 on:
   push:
-    branches: [main]
+    branches: [main, 'release/**']
     paths:
       - "fastlane/metadata/**"
       - "fastlane/Deliverfile"
@@ -76,6 +84,7 @@ jobs:
           fi
 
   # Push App Store metadata (TEXT ONLY) to App Store Connect.
+  # Runs on main and on release/* — the text must land before you submit.
   store-metadata:
     needs: changes
     if: needs.changes.outputs.metadata == 'true'
@@ -100,6 +109,7 @@ jobs:
         run: bundle exec fastlane metadata
 
   # Sync screenshots (IMAGES ONLY) to App Store Connect.
+  # Runs on main and on release/* — same reason as metadata.
   store-screenshots:
     needs: changes
     if: needs.changes.outputs.screenshots == 'true'
@@ -128,7 +138,9 @@ jobs:
   #    (Hosting Admin role only). Rollback: `firebase hosting:rollback`. }}
   deploy-data:
     needs: changes
-    if: needs.changes.outputs.data == 'true'
+    if: |
+      needs.changes.outputs.data == 'true' &&
+      (github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch')
     runs-on: ubuntu-latest
     timeout-minutes: 10
     concurrency:

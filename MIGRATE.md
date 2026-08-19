@@ -113,17 +113,23 @@ deliver can no-op silently (see gotchas).
 ## 7. First release
 
 1. `git checkout -b release/X.Y.Z` off `main`.
-2. Add the CHANGELOG section for that version. Push.
+2. Add the CHANGELOG section for that version, and update `release_notes`
+   in `fastlane/metadata/<locale>.json` — that one is what users read as
+   "What's New", and it is a different file from the CHANGELOG, which only
+   ever reaches GitHub. Push.
 3. Xcode Cloud builds from the branch directly. Watch it in App Store
    Connect (or `gh run list` won't show it — it's not a GitHub Actions
    run). If it fails, fix and push again to the same branch; no new
-   branch needed for a rebuild.
+   branch needed for a rebuild. The same push also syncs store text and
+   screenshots, so the listing is ready before you submit.
 4. Build appears in TestFlight → install → test on a real device.
-5. Happy? Open a PR from the release branch to `main`, let
-   `pr.yml`'s `validate-release` job confirm the CHANGELOG + version
+5. Submit in App Store Connect. Rejected? Fix on the same branch and push
+   again — nothing is merged or tagged yet, so there is nothing to undo.
+6. **Once Apple approves**, open a PR from the release branch to `main`,
+   let `pr.yml`'s `validate-release` job confirm the CHANGELOG + version
    checks, merge. That merge creates tag `vX.Y.Z` and publishes the GitHub
-   Release — automatic, `release.yml` does it.
-6. Submit in App Store Connect.
+   Release — automatic, `release.yml` does it. Because the merge comes
+   after approval, the newest tag always names the version that is live.
 
 ---
 

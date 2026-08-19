@@ -44,6 +44,8 @@ jobs:
             exit 1
           }
 
+      # The merge happens after Apple has approved (PLAYBOOK §5), so this tag
+      # marks a version that is live on the App Store — not one in TestFlight.
       - name: Create GitHub Release (creates the vX.Y.Z tag on the merge commit)
         env:
           GH_TOKEN: ${{ github.token }}
@@ -53,3 +55,21 @@ jobs:
             --title "{{PROJECT_NAME}} $VERSION" \
             --notes-file notes.md \
             --target "${{ github.event.pull_request.merge_commit_sha }}"
+
+      # A green step is not proof the release exists — this has reported
+      # success while leaving no tag and no release behind. Check, don't assume.
+      - name: Verify the release and tag actually exist
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view "v$VERSION" --json tagName,targetCommitish > /dev/null || {
+            echo "::error::gh release create reported success but v$VERSION does not exist"
+            exit 1
+          }
+          git fetch --tags --quiet
+          git rev-parse -q --verify "refs/tags/v$VERSION" > /dev/null || {
+            echo "::error::release v$VERSION exists but its tag does not"
+            exit 1
+          }
+          echo "Verified: release and tag v$VERSION exist."
+

@@ -140,16 +140,30 @@ To release:
 
 1. `main` already has everything you want to ship (it always does — work
    only lands there through merged PRs). Branch: `release/X.Y.Z`.
-2. Add the CHANGELOG section for that version, push the branch.
+2. Add the CHANGELOG section for that version, and the user-facing
+   `release_notes` in `fastlane/metadata/<locale>.json`. Push the branch.
 3. Xcode Cloud archives directly from that branch — no tag needed. Push
    again as many times as TestFlight testing needs; each push is a new
-   build, no new branch required for a rebuild.
-4. Happy with what's in TestFlight? Merge the branch into `main`. That
-   merge is the **only** moment a tag gets created (`vX.Y.Z`), and it's
-   permanent — a tag here is a historical record, it never triggers
-   anything and never moves.
-5. Test on a real device. Submit in App Store Connect (phased release on,
-   manual release). Rollback: pause phased release, ship the next patch.
+   build, no new branch required for a rebuild. Pushing also syncs store
+   text and screenshots to App Store Connect (`main.yml`), so the listing
+   is ready before you submit.
+4. Test on a real device. Submit in App Store Connect (phased release on,
+   manual release). If Apple rejects, fix on the same branch and push
+   again — nothing has been merged or tagged yet, so there is nothing to
+   undo.
+5. **Once Apple approves**, merge the branch into `main`. That merge is
+   the **only** moment a tag gets created (`vX.Y.Z`), and it's permanent —
+   a historical record that never triggers anything and never moves.
+
+Merging last is deliberate. It means a tag exists only for a version that
+actually reached users, so the newest tag always answers "what is live?" —
+and a rejected build never leaves a tag behind. It also keeps content
+deploys (`deploy-data`, main-only) from going live while the build that
+understands them is still in review. The cost is that `main` lags by the
+length of Apple's review, which for a solo developer shipping one version
+at a time is not a cost at all.
+
+Rollback: pause phased release, ship the next patch.
 
 `App/ci_scripts/ci_pre_xcodebuild.sh` reads the marketing version straight
 from the branch name (`release/1.8.0` → `1.8.0`; `release/3.6` works too).
