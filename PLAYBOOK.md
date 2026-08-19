@@ -382,14 +382,25 @@ than taste.
 Both are escapable with `--no-verify`. A hook you cannot bypass gets uninstalled
 the first time it is wrong; one you can bypass gets kept.
 
-## 10. Git
+## 10. This repo follows its own rules
+
+PES runs the hooks it ships (`.githooks`, `core.hooksPath`) and has its own CI:
+`validate.sh`, the SYSKit tests, and a scaffold job that builds a throwaway app
+from `setup.sh` and checks it passes its own PR checks.
+
+That last job exists because it has already failed: a scaffolded app had no
+`AnalyticsManager.swift` while the guard for it ran on every PR, so every new app
+was red from its first commit. A standards repo without CI is a standards repo
+whose rules are advisory.
+
+## 11. Git
 
 Trunk-based, one permanent branch (section 3). Squash merge only, branches
 auto-delete. Commit format: `type: what it does` with types
 feat/fix/chore/docs/refactor/test/ci. Secrets never in the repo. Private
 repos by default.
 
-## 11. Once per app
+## 12. Once per app
 
 - [ ] 2FA everywhere; ASC API key in password manager + repo secrets +
       Xcode Cloud Environment Variables (three separate places, same key)
@@ -400,7 +411,7 @@ repos by default.
 - [ ] Branch protection: enable it if the repo is public or on a paid
       plan; otherwise the PR checks are advisory only — know that going in
 
-## 12. Starting a NEW app (the complete recipe)
+## 13. Starting a NEW app (the complete recipe)
 
 MIGRATE.md is for moving an *existing* app onto this system; this is the
 from-scratch path. Every step is the same for every app — an app that
@@ -445,7 +456,7 @@ analytics guard) just deletes that part and nothing else changes.
    checks must produce a run. Then do a `release/0.1.0` dry run end to
    end (§5): branch → Xcode Cloud archive → TestFlight → merge → tag
    appears. Automation you haven't seen fire is not automation.
-9. Finish the §11 once-per-app checklist.
+9. Finish the §12 once-per-app checklist.
 
 ---
 

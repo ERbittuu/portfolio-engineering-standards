@@ -193,6 +193,18 @@ for rel in .gitignore .swiftlint.yml; do
   fi
 done
 
+# SYSKit lands on disk here, but adding it to the Xcode target is a pbxproj
+# edit. That is deliberately not automated: a bad pbxproj edit breaks the project
+# in ways that are tedious to unpick, and this runs across every app. Reported
+# instead, so "files copied" is never mistaken for "app uses it".
+if [[ -d "$TARGET/App/Packages/SYSKit" ]]; then
+  pbx="$(ls "$TARGET/App/"*.xcodeproj/project.pbxproj 2>/dev/null | head -1)"
+  if [[ -f "$pbx" ]] && ! grep -q "SYSKit" "$pbx"; then
+    echo "  XCODE   SYSKit vendored but not linked — add it in Xcode:"
+    echo "          File > Add Package Dependencies > Add Local… > App/Packages/SYSKit"
+  fi
+fi
+
 # core.hooksPath is per-clone git config, not a file, so it cannot be copied —
 # it has to be set. A repo with .githooks/ but no hooksPath looks protected and
 # is not.

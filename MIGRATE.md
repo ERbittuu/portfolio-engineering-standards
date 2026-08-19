@@ -25,6 +25,18 @@ commit before applying — the diff is the review.
 Files it reports but never touches: `.gitignore`, `.swiftlint.yml`, and any
 workflow PES no longer ships. Deleting those is your call, not the script's.
 
+**One step it cannot do for you.** `update.sh` copies SYSKit into
+`App/Packages/`, but linking it to the target is a `project.pbxproj` edit, which
+is not worth automating across every app — a bad edit breaks the project in ways
+that take longer to unpick than doing it by hand. In Xcode:
+
+> File > Add Package Dependencies… > Add Local… > `App/Packages/SYSKit`
+> then add `SYSKit` (and `SYSFirebase`) to the app target's Frameworks.
+
+Until that is done the files are present and the app uses none of them, which
+looks exactly like a finished migration. `scripts/lint-project.sh` fails on it,
+and `update.sh` reports it.
+
 ## 1. Repo (30 min)
 
 1. `git init -b main`, copy the standard `.gitignore` first, then one

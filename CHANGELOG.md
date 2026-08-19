@@ -1,5 +1,32 @@
 # Changelog
 
+## [1.9.0] - 2026-08-20
+
+### Added
+- **CI for this repo.** `validate.sh` existed long before anything ran it, and in
+  that time collected real failures nobody saw — the README version line had
+  drifted two releases behind and PLAYBOOK.md tripped the placeholder check. It
+  now runs on every PR, alongside the SYSKit tests and a scaffold job that builds
+  a throwaway app from `setup.sh` and checks it passes its own PR checks. That
+  last one exists because it has already failed: a scaffolded app had no
+  `AnalyticsManager.swift` while the guard for it ran on every PR.
+- **PES now runs the hooks it ships.** It shipped hook standards while having
+  none installed on itself.
+- `scripts/lint-project.sh` — build settings that compile and are still wrong.
+  CI builds the app, so anything that compiles passes: a literal
+  `CFBundleShortVersionString` silently beats `MARKETING_VERSION`, so CI stamps
+  the version, reports success and ships the wrong number every release. Also
+  catches missing `-ObjC` (Firebase fails at runtime, not build time), remote
+  packages, and SYSKit vendored but never linked in Xcode.
+- `update.sh` reports when SYSKit is on disk but absent from `project.pbxproj`.
+  Linking it is a pbxproj edit, deliberately not automated across every app — a
+  bad edit is slower to unpick than doing it by hand. Without the warning,
+  "files copied" looks exactly like a finished migration.
+
+### Fixed
+- Published the GitHub Release for v1.4.0, which had been tagged but never
+  released.
+
 ## [1.8.0] - 2026-08-20
 
 ### Added

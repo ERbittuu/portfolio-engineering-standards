@@ -44,4 +44,4 @@ cd my-app && git init -b main
 Simple SemVer, see [VERSION](VERSION) and [CHANGELOG.md](CHANGELOG.md).
 Release with `scripts/bump-version.sh` then `scripts/release.sh`.
 
-Current version: **1.8.0**
+Current version: **1.9.0**
