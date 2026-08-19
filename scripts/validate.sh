@@ -42,8 +42,9 @@ for p in templates/scripts/ci/*.py; do
 done
 
 # 5. Core docs contain no unresolved {{PLACEHOLDER}}
-# (MIGRATE.md and templates/ legitimately mention the token syntax)
-if grep -rnE '\{\{[A-Z][A-Z_]*\}\}' README.md PLAYBOOK.md decisions/ 2>/dev/null \
+# (MIGRATE.md, PLAYBOOK.md and templates/ legitimately document the token
+# syntax itself, so they are checked for stray tokens elsewhere, not here)
+if grep -rnE '\{\{[A-Z][A-Z_]*\}\}' README.md decisions/ 2>/dev/null \
     | grep -v 'adr-template.md'; then
   err "placeholder tokens found in core docs"
 fi

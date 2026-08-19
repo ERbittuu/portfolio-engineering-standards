@@ -7,23 +7,16 @@
 #     only — never on tags. A tag is created once, after that branch merges
 #     to main, purely as a permanent record. It never triggers a build.
 #   - Marketing version comes straight from the branch name.
-#   - Build number comes from App Store Connect itself: the last build
-#     already uploaded for this exact version, plus one — or 1 if this is
-#     the first build of the version.
+#   - Build number is Xcode Cloud's own. It maintains a global sequential
+#     counter per app (App Store Connect → Xcode Cloud → Settings → Build
+#     Number) and OVERWRITES CFBundleVersion with it at archive/export
+#     time, regardless of anything set here. That is not a toggle and is
+#     not exposed via the API, so this script does not try to compute one.
 #
-# IMPORTANT CAVEAT, read before relying on this: Xcode Cloud maintains its
-# own global, sequential build-number counter per app (App Store Connect →
-# Xcode Cloud → Settings → Build Number) and OVERWRITES CFBundleVersion
-# with it at archive/export time — regardless of what this script sets.
-# This isn't a toggle you can turn off, and it isn't exposed via the App
-# Store Connect API. In practice: the code below still runs and still sets
-# a value, and the marketing-version stamping half of it works correctly
-# and matters — but the build number Apple actually ships with will climb
-# forever from Xcode Cloud's own counter, not reset per version like the
-# lookup below computes. Keep the lookup anyway (harmless, and correct if
-# Apple ever exposes a way to disable their auto-numbering) but don't
-# expect the "resets per version" property to actually hold. See
-# MIGRATE.md's gotcha table.
+# Consequence worth knowing: this script needs no credentials at all, so
+# the Xcode Cloud Release workflow needs no environment variables. The
+# App Store Connect API key lives only in GitHub Secrets, where the store
+# metadata and screenshot workflows use it.
 
 set -e
 
@@ -42,18 +35,19 @@ if [ "$CI_XCODEBUILD_ACTION" = "archive" ]; then
       ;;
   esac
 
-  BUILD=$(ruby "$CI_PRIMARY_REPOSITORY_PATH/App/ci_scripts/lib/asc_build_number.rb" "$VERSION" "{{BUNDLE_ID}}")
-  echo "Marketing version: $VERSION | build number: $BUILD"
+  echo "Marketing version: $VERSION (build number is assigned by Xcode Cloud)"
 
   # These projects use GENERATE_INFOPLIST_FILE=YES (or an Info.plist whose
   # version keys reference the build settings), so CFBundleShortVersionString
-  # and CFBundleVersion derive from the MARKETING_VERSION and
-  # CURRENT_PROJECT_VERSION *build settings* — not from a literal Info.plist
-  # value. agvtool only edits Info.plist files (a silent no-op here), so set
-  # the build settings directly in the project. The /g also keeps any
-  # watch/widget extension targets on the same version.
+  # derives from the MARKETING_VERSION *build setting* — not from a literal
+  # Info.plist value. agvtool only edits Info.plist files (a silent no-op
+  # here), so set the build setting directly in the project. The /g also
+  # keeps any watch/widget extension targets on the same version.
+  #
+  # CURRENT_PROJECT_VERSION is deliberately left alone: Xcode Cloud
+  # overwrites CFBundleVersion with its own counter at export time, so
+  # stamping it here would be theatre.
   PBXPROJ="{{PROJECT_NAME}}.xcodeproj/project.pbxproj"
   sed -i '' "s/MARKETING_VERSION = [^;]*;/MARKETING_VERSION = $VERSION;/g" "$PBXPROJ"
-  sed -i '' "s/CURRENT_PROJECT_VERSION = [^;]*;/CURRENT_PROJECT_VERSION = $BUILD;/g" "$PBXPROJ"
-  echo "Set MARKETING_VERSION=$VERSION and CURRENT_PROJECT_VERSION=$BUILD in the project."
+  echo "Set MARKETING_VERSION=$VERSION in the project."
 fi

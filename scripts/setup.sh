@@ -52,8 +52,7 @@ done
 for cs in ci_post_clone ci_pre_xcodebuild ci_post_xcodebuild; do
   copy "ci_scripts/$cs.sh" "App/ci_scripts/$cs.sh"
 done
-copy ci_scripts/lib/asc_build_number.rb "App/ci_scripts/lib/asc_build_number.rb"
-chmod +x "$TARGET"/App/ci_scripts/*.sh "$TARGET"/App/ci_scripts/lib/*.rb 2>/dev/null || true
+chmod +x "$TARGET"/App/ci_scripts/*.sh 2>/dev/null || true
 
 # PR-check scripts (used by validate-screenshots.yml / pr-guards.yml)
 copy scripts/ci/validate_screenshots.py       scripts/ci/validate_screenshots.py

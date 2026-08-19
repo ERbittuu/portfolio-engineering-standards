@@ -1,5 +1,29 @@
 # Changelog
 
+## [1.3.0] - 2026-08-19
+
+### Removed
+- `templates/ci_scripts/lib/asc_build_number.rb` and its call from
+  `ci_pre_xcodebuild.sh`. It authenticated to App Store Connect to compute a
+  build number that Xcode Cloud then overwrote with its own counter at export
+  time — work whose result was always discarded. Removing it means the archive
+  path needs no credentials and makes no network call that could fail it.
+
+### Changed
+- **The App Store Connect API key now lives in GitHub Secrets only.** Xcode
+  Cloud needs no environment variables; MIGRATE.md step 4 is now "nothing to
+  configure". Store metadata and screenshot workflows are unaffected.
+- `ci_pre_xcodebuild.sh` stamps `MARKETING_VERSION` only. `CURRENT_PROJECT_VERSION`
+  is left alone, since Xcode Cloud overwrites `CFBundleVersion` regardless.
+
+### Fixed
+- `validate.sh` failed on this repo: the README version line had drifted to
+  1.1.0 (VERSION was edited without `bump-version.sh`), and PLAYBOOK.md tripped
+  the placeholder check by documenting the token syntax, which MIGRATE.md was
+  already exempted for.
+- Retired three gotcha-table entries that described failures no longer
+  reachable (ASC key parsing and env-var persistence in Xcode Cloud).
+
 ## [1.2.0] - 2026-07-12
 
 The whole portfolio (Prarthana, 1tattooz, ABCLearning, Drawing) was

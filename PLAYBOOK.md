@@ -144,15 +144,14 @@ To release:
    manual release). Rollback: pause phased release, ship the next patch.
 
 `App/ci_scripts/ci_pre_xcodebuild.sh` reads the marketing version straight
-from the branch name (`release/1.8.0` → `1.8.0`; `release/3.6` works too)
-and asks App Store Connect for the build number: last build already
-uploaded for that exact version, plus one, or 1 if none exist. See
-`App/ci_scripts/lib/asc_build_number.rb` — it retries transient network
-errors and 429/5xx with backoff, because Xcode Cloud runners hit sporadic
-SSL resets against the ASC API.
+from the branch name (`release/1.8.0` → `1.8.0`; `release/3.6` works too).
+The build number is Xcode Cloud's own: it keeps a global sequential counter
+per app and overwrites `CFBundleVersion` with it at export time whatever a
+script sets, so nothing here tries to compute one. That keeps the archive
+path free of credentials and of a network call that could fail it.
 
-The script then stamps `MARKETING_VERSION` and `CURRENT_PROJECT_VERSION`
-directly in the pbxproj with `sed` — NOT with agvtool. These projects use
+The script then stamps `MARKETING_VERSION` directly in the pbxproj with
+`sed` — NOT with agvtool. These projects use
 `GENERATE_INFOPLIST_FILE=YES` (or an Info.plist whose version keys
 reference the build settings), and agvtool only edits literal Info.plist
 values, so on these projects it is a silent no-op that leaves the dev
@@ -194,10 +193,9 @@ one build.
   (promotional text only — changeable anytime without a build), `pricing`
   (price tier), `review_notes` (app review contact info).
 - Auth is an App Store Connect API key in repo secrets (`ASC_KEY_ID`,
-  `ASC_ISSUER_ID`, `ASC_KEY_CONTENT`). Never Apple ID login. Xcode Cloud
-  needs its own copy of the same key as Environment Variables on the
-  Release workflow — it can't read GitHub Secrets, and pasting a
-  multi-line key into that UI field is unreliable (see MIGRATE.md).
+  `ASC_ISSUER_ID`, `ASC_KEY_CONTENT`). Never Apple ID login. GitHub is the
+  only place it lives — Xcode Cloud needs no credentials, because nothing
+  in the archive path talks to App Store Connect.
 - Things Apple rejects that I learned the hard way: emoji in "What's New",
   placeholder URLs, and store locales that don't exist (Hindi is a store
   locale, Gujarati is not — app languages and store languages are
@@ -273,10 +271,9 @@ analytics guard) just deletes that part and nothing else changes.
    check `IS_ANALYTICS_ENABLED` is `true` in it (the pr-guard enforces
    this forever after).
 5. **App Store Connect.** Create the app record (bundle ID = forever).
-   One ASC API key (App Manager) lives in three places: password
-   manager, GitHub repo secrets (`ASC_KEY_ID` / `ASC_ISSUER_ID` /
-   `ASC_KEY_CONTENT`), and Xcode Cloud Release-workflow environment
-   variables — the last one cannot be created via API, only in the UI.
+   One ASC API key (App Manager) lives in two places: password manager and
+   GitHub repo secrets (`ASC_KEY_ID` / `ASC_ISSUER_ID` /
+   `ASC_KEY_CONTENT`). Xcode Cloud needs no copy.
 6. **Xcode Cloud** — MIGRATE §4, unchanged for a new app: grant the
    GitHub App access first, then two workflows (`CI` on main+PRs, and
    `Release` on Branch Changes with `release/` prefix), both filtered to

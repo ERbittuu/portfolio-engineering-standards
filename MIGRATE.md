@@ -72,13 +72,10 @@ CLI created projects don't have it. Turn on Crashlytics email alerts.
    Changes**, pattern `release/` with "is prefix" checked, Files and
    Folders filter set to `App`, Archive → TestFlight Internal. Not a tag
    condition — see PLAYBOOK §5 for why releases are branch-driven here.
-4. Add `ASC_KEY_ID` / `ASC_ISSUER_ID` / `ASC_KEY_CONTENT` as **Environment
-   Variables on the Release workflow** (Edit → Environment → Add, three
-   times, mark each Secret, then actually hit Save — an edit that isn't
-   explicitly saved silently reverts). This is a separate store from
-   GitHub Secrets; Xcode Cloud can't read those. Paste the key carefully —
-   see the gotcha table, that field does not reliably preserve a
-   multi-line paste.
+4. No environment variables. The pre-build script only reads the branch
+   name, so Xcode Cloud needs no credentials at all. The App Store Connect
+   API key lives in GitHub Secrets only, where the store metadata and
+   screenshot workflows use it.
 5. In ci_scripts remember: scripts start inside `ci_scripts/`, so
    `cd "$CI_PRIMARY_REPOSITORY_PATH/App"` first — the version-stamping
    sed uses a project-relative path (and any agvtool call would need it
@@ -136,14 +133,11 @@ deliver can no-op silently (see gotchas).
 | Onboarding wizard stuck on a dependency repo | You still have remote packages. Make them local (step 2). Also add a GitHub account in Xcode Settings → Accounts |
 | `agvtool: There are no Xcode project files` in CI | Xcode Cloud starts scripts inside `ci_scripts/` — cd to the project folder first |
 | Archive ships the dev placeholder version even though the pre-build script "ran fine" | agvtool only edits literal Info.plist values. With `GENERATE_INFOPLIST_FILE=YES` (or an Info.plist whose version keys are `$(MARKETING_VERSION)` references) it is a silent no-op. Stamp `MARKETING_VERSION` / `CURRENT_PROJECT_VERSION` in the pbxproj with sed — see the template `ci_pre_xcodebuild.sh` |
-| `asc_build_number.rb` dies with a one-off SSL reset / timeout mid-archive | Xcode Cloud runners hit transient network failures against the ASC API. The template script retries network errors and 429/5xx with exponential backoff — don't remove that |
 | A store workflow goes permanently red: `Could not find lane` | The workflow↔Fastfile lane names are a contract: `validate_metadata`, `metadata`, `screenshots` must exist under exactly those names. Renaming a lane without touching `.github/workflows/` breaks the check silently-in-plain-sight |
 | Crashlytics reports arrive unsymbolicated; post-build log says `upload-symbols not found` (but the build is green) | The dSYM script's paths must be `App/Packages/FirebaseKit/Tools/upload-symbols` and `App/Resources/GoogleService-Info.plist` — a missing `App/` prefix makes it warn and `exit 0` forever |
 | Analytics dashboard empty for weeks, no errors anywhere | `IS_ANALYTICS_ENABLED` sitting at `false` in `GoogleService-Info.plist`. This shipped on three of four apps. `pr-guards.yml`'s `firebase-config-guard` now asserts it on every PR — keep that job |
 | Release workflow never triggers | Branch condition pattern is wrong, or "is prefix" isn't checked — `release/1.8.0` needs to match a `release/` prefix, not an exact string |
-| `ASC_KEY_ID not set` in an Xcode Cloud build log, even though you added it | The env var edit wasn't actually saved — re-open the workflow editor and confirm it's still listed, re-save if not |
-| `Could not parse PKey: no start line` from `asc_build_number.rb` | Xcode Cloud's Environment Variable text field doesn't reliably preserve a multi-line paste — it can strip the BEGIN/END markers or flatten the newlines entirely. The template script normalizes all of these forms automatically; if you hit this with your own script, reconstruct the PEM structure defensively rather than trusting the paste |
-| Build number doesn't reset per version despite the ASC lookup working correctly | Xcode Cloud has its own global sequential build-number counter (App Store Connect → Xcode Cloud → Settings → Build Number) that overwrites `CFBundleVersion` at archive time regardless of what a script sets. Not a bug, not fixable — see PLAYBOOK §5 |
+| Build number climbs forever instead of resetting per version | Xcode Cloud has its own global sequential build-number counter (App Store Connect → Xcode Cloud → Settings → Build Number) that overwrites `CFBundleVersion` at archive time regardless of what a script sets. Not a bug, not fixable — which is why nothing here tries to compute one |
 | `gh api .../branches/main/protection` returns 403 "Upgrade to GitHub Pro" | Branch protection (classic or Rulesets) needs a paid plan for a private repo. Public repos and paid orgs get it free |
 | `dorny/paths-filter` fails with "Resource not accessible by integration" | The workflow's `permissions:` block needs `pull-requests: read` — `contents: read` alone isn't enough for it to list a PR's changed files |
 | `pr-guards.yml`'s secret-scan flags its own source code | gitleaks' `private-key` rule matches the literal `-----BEGIN PRIVATE KEY-----` string anywhere, including inside a script that reconstructs that string as marker text, not a real key. Confirm it's a false positive with a local scan, then suppress with an inline `# gitleaks:allow` comment |
