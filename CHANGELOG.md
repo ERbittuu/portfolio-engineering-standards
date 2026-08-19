@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.6.0] - 2026-08-20
+
+### Changed
+- `SYSKitFirebase` is now `SYSFirebase`, so our own packages read as a set:
+  `SYSKit`, `SYSFirebase`. Free to do now — no app has adopted them yet.
+- Documented the rule that **`SYS` means our code**. Vendored third-party
+  packages keep their own names: `FirebaseKit` holds Google's xcframeworks,
+  `Kingfisher` is Kingfisher. That distinction is load-bearing rather than
+  cosmetic — it is what `.swiftlint.yml` excludes from linting and what
+  `update.sh` reports on but never overwrites, so prefixing someone else's
+  binaries with our studio prefix would blur the line those tools rely on.
+
 ## [1.5.1] - 2026-08-20
 
 ### Fixed

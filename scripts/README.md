@@ -8,6 +8,6 @@
 | `bump-version.sh <major\|minor\|patch>` | PES repo | Bump VERSION, stub CHANGELOG section, update README |
 | `release.sh` | PES repo | Validate → commit → annotated tag vX.Y.Z (+ major alias) → push |
 
-`update.sh` also syncs `SPM/SYSKit` and `SPM/SYSKitFirebase` into an app's
+`update.sh` also syncs `SPM/SYSKit` and `SPM/SYSFirebase` into an app's
 `App/Packages/`, and compares third-party package versions against `vendor.json`
 — reporting drift without ever touching their contents.

@@ -72,7 +72,7 @@ copy app/config.json      App/Resources/config.json
 copy app/AnalyticsManager.swift  App/Source/Shared/AnalyticsManager.swift
 
 # SYSKit — the shared layer. Vendored as local packages, never fetched.
-for pkg in SYSKit SYSKitFirebase; do
+for pkg in SYSKit SYSFirebase; do
   if [[ -e "$TARGET/App/Packages/$pkg" ]]; then
     echo "  skip   App/Packages/$pkg"; skipped=$((skipped+1))
   else

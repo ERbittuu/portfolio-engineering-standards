@@ -7,7 +7,7 @@
 //
 // Deliberately has NO dependencies. That keeps it buildable and testable on its
 // own — `swift test` runs on a Linux CI runner with no Xcode, no simulator and
-// no Firebase. The Firebase wiring lives in the separate SYSKitFirebase package,
+// no Firebase. The Firebase wiring lives in the separate SYSFirebase package,
 // which is only resolvable once vendored next to FirebaseKit inside an app.
 //
 // It also contains no screens. It drives startup and returns state; the app

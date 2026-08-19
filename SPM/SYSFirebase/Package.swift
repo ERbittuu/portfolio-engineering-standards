@@ -1,6 +1,6 @@
 // swift-tools-version: 5.9
 //
-// SYSKitFirebase — the adapter that connects SYSKit's protocols to Firebase.
+// SYSFirebase — the adapter that connects SYSKit's protocols to Firebase.
 //
 // Separate from SYSKit on purpose. Both relative paths only resolve once this
 // package sits in an app's App/Packages/ alongside SYSKit and FirebaseKit, so
@@ -10,10 +10,10 @@
 import PackageDescription
 
 let package = Package(
-    name: "SYSKitFirebase",
+    name: "SYSFirebase",
     platforms: [.iOS(.v15)],
     products: [
-        .library(name: "SYSKitFirebase", targets: ["SYSKitFirebase"]),
+        .library(name: "SYSFirebase", targets: ["SYSFirebase"]),
     ],
     dependencies: [
         .package(path: "../SYSKit"),
@@ -21,7 +21,7 @@ let package = Package(
     ],
     targets: [
         .target(
-            name: "SYSKitFirebase",
+            name: "SYSFirebase",
             dependencies: [
                 "SYSKit",
                 .product(name: "FirebaseAnalytics", package: "FirebaseKit"),

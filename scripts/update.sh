@@ -24,7 +24,7 @@ TARGET="$(cd "${1:?usage: update.sh [--check] <app-dir>}" && pwd)"
 # Whole directories PES owns, copied wholesale.
 MANAGED_DIRS=(
   "App/Packages/SYSKit"
-  "App/Packages/SYSKitFirebase"
+  "App/Packages/SYSFirebase"
 )
 
 # Files PES owns. Anything not listed here belongs to the app.

@@ -11,7 +11,7 @@ public extension SYSAnalyticsEvent {
     var parameters: [String: Any] { [:] }
 }
 
-/// Where events actually go. Implemented by SYSKitFirebase, so this package
+/// Where events actually go. Implemented by SYSFirebase, so this package
 /// needs no Firebase and stays testable without it.
 public protocol SYSAnalyticsBackend: AnyObject {
     func configure()

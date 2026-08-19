@@ -249,12 +249,18 @@ and then the separate dev/prod project rule applies.
 
 ## 8. SYSKit — the shared layer
 
+**`SYS` means our code.** Vendored third-party packages keep their own names —
+`FirebaseKit` holds Google's xcframeworks, `Kingfisher` is Kingfisher — and that
+distinction is load-bearing: it is what `.swiftlint.yml` excludes, and what
+`update.sh` reports on but never overwrites. Prefixing someone else's binaries
+with our studio prefix would blur exactly the line those tools rely on.
+
 Every app vendors two local packages from `SPM/`:
 
 | Package | Contents | Dependencies |
 |---|---|---|
 | `SYSKit` | config, network, logging, lifecycle, analytics plumbing | **none** |
-| `SYSKitFirebase` | the one file that imports Firebase | SYSKit + FirebaseKit |
+| `SYSFirebase` | the one file that imports Firebase | SYSKit + FirebaseKit |
 
 They are separate on purpose. `SYSKit` has no dependencies, so `swift test` runs
 it on a plain Linux runner — no Xcode, no simulator, no Firebase — which is what

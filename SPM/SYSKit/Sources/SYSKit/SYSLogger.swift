@@ -5,7 +5,7 @@ import os
 ///
 /// `error(_:_:)` is the one that matters: errors otherwise get `print`ed and
 /// vanish, so production failures that never crash the app are invisible.
-/// Attach a reporter (SYSKitFirebase provides a Crashlytics one) and they
+/// Attach a reporter (SYSFirebase provides a Crashlytics one) and they
 /// become non-fatals you can actually see.
 public enum SYSLogger {
     public enum Level: Int, Comparable {
@@ -56,7 +56,7 @@ public enum SYSLogger {
     }
 }
 
-/// Implemented by SYSKitFirebase. Kept as a protocol so SYSKit core needs no
+/// Implemented by SYSFirebase. Kept as a protocol so SYSKit core needs no
 /// Firebase and can be tested without it.
 public protocol SYSErrorReporter: AnyObject {
     func report(message: String, error: Error?)
