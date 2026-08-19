@@ -361,9 +361,16 @@ set it; `update.sh --check` reports when it is missing.
 | secrets (gitleaks) | a secret pushed to GitHub is compromised even if the branch is deleted a minute later. The CI guard only fires after that has happened |
 | remote SwiftPM packages | easy to reintroduce by accident when Xcode adds one through its UI |
 | `config.json` | it reaches every user at once |
+| `.env`, `.p8`, `.p12`, `.mobileprovision` by name | cheaper and more reliable than a scanner for the files that leak most often |
+| edits inside `App/Packages` (except `SYS*`) | vendored third-party is only touched when re-vendoring an upstream release |
+| SwiftLint on changed files only | fast feedback without waiting for CI |
 
 Skips the secret scan with a note when gitleaks isn't installed, rather than
 blocking work on a missing tool.
+
+**commit-msg** enforces Conventional Commits and a 72-character subject. The
+CHANGELOG sections are written from these, so the format is load-bearing rather
+than taste.
 
 **pre-push**
 

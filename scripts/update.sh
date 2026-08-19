@@ -48,6 +48,7 @@ MANAGED=(
   ".gitattributes"
   ".githooks/pre-commit"
   ".githooks/pre-push"
+  ".githooks/commit-msg"
 )
 
 # Where each managed file comes from in templates/.
@@ -149,10 +150,15 @@ if [[ -f "$PES_ROOT/vendor.json" && -d "$TARGET/App/Packages" ]]; then
     dir="$TARGET/App/Packages/$name"
     [[ -d "$dir" ]] || continue          # app does not use this package
 
-    have="$(tr -d '[:space:]' < "$dir/.vendor-version" 2>/dev/null || true)"
+    have=""
+    [[ -f "$dir/.vendor-version" ]] && have="$(tr -d '[:space:]' < "$dir/.vendor-version")"
     if [[ -z "$have" ]]; then
-      echo "  VENDOR  $name — no .vendor-version; recording $want"
-      [[ $CHECK -eq 0 ]] && printf '%s\n' "$want" > "$dir/.vendor-version"
+      if [[ $CHECK -eq 1 ]]; then
+        echo "  VENDOR  $name — no .vendor-version (would record $want)"
+      else
+        printf '%s\n' "$want" > "$dir/.vendor-version"
+        echo "  VENDOR  $name — recorded $want"
+      fi
     elif [[ "$have" != "$want" ]]; then
       echo "  VENDOR  $name  $have -> $want  (re-vendor by hand, then update .vendor-version)"
     fi

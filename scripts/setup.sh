@@ -63,6 +63,7 @@ chmod +x "$TARGET"/App/ci_scripts/*.sh 2>/dev/null || true
 # .git/hooks is not versioned — otherwise every clone silently has no hooks.
 copy githooks/pre-commit  .githooks/pre-commit
 copy githooks/pre-push    .githooks/pre-push
+copy githooks/commit-msg  .githooks/commit-msg
 chmod +x "$TARGET"/.githooks/* 2>/dev/null || true
 if git -C "$TARGET" rev-parse --git-dir >/dev/null 2>&1; then
   git -C "$TARGET" config core.hooksPath .githooks

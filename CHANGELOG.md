@@ -1,5 +1,24 @@
 # Changelog
 
+## [1.7.1] - 2026-08-20
+
+### Added
+- `commit-msg` hook enforcing Conventional Commits and a 72-character subject,
+  adopted from Prarthana, which had already written it. CHANGELOG sections are
+  written from these messages, so the format is load-bearing.
+- `pre-commit` also blocks `.env`, `.p8`, `.p12`, `.mobileprovision` and
+  `.certSigningRequest` by name — cheaper and more reliable than a scanner for
+  the files that leak most often — blocks hand-edits inside `App/Packages`
+  (except our own `SYS*` packages, which live there too), and lints only the
+  staged Swift files. All three came from Prarthana's hooks, which were ahead of
+  what PES shipped.
+
+### Fixed
+- `update.sh --check` printed a shell error and could not read existing
+  `.vendor-version` files: the input redirect is evaluated before `2>/dev/null`,
+  so the failure was reported rather than suppressed. It now guards the file
+  explicitly and says "would record" in check mode, since it records nothing.
+
 ## [1.7.0] - 2026-08-20
 
 ### Added
