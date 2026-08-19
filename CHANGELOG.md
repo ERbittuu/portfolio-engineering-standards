@@ -1,5 +1,46 @@
 # Changelog
 
+## [1.5.0] - 2026-08-20
+
+### Added
+- **SYSKit** — the shared layer every app vendors, in `SPM/`. Two packages, kept
+  apart on purpose: `SYSKit` has **no dependencies**, so `swift test` runs it on a
+  plain Linux runner with no Xcode, no simulator and no Firebase; `SYSKitFirebase`
+  holds the single file that imports Firebase and only resolves once vendored
+  beside FirebaseKit in an app. An earlier single-package version could not build
+  in this repo at all, which would have made the CI test job impossible.
+- It contains **no screens** and imports no UI framework. `SYSBootstrap.start()`
+  returns state and the app renders it, so the one UIKit app uses it unchanged —
+  `await` works the same from a scene delegate as from a SwiftUI `.task`, and no
+  entry-point migration is needed.
+- Modules: `SYSConfig` (moved here from each app's Shared folder), `SYSNetwork`
+  (JSON, file download, ETag, retry, Firebase Storage URLs), `SYSSettings` (typed
+  UserDefaults — raw `UserDefaults` appears in 16 files across the apps),
+  `SYSLogger` (quiet in release, non-fatal error reporting), `SYSLifecycle`,
+  `SYSOnboarding` (versioned, so a new flow can re-show), `SYSUpdate`,
+  `SYSMaintenance`, `SYSWhatsNew`, `SYSRating`, `SYSVersion`, `SYSAnalytics`.
+- 22 unit tests, run by a new `syskit-tests` job in `pr.yml`. They cover the
+  failures that are silent rather than loud: `"1.10.0"` not sorting below
+  `"1.9.0"`, a stored `false` not reading as unset, Storage paths encoding `/`
+  as `%2F`, and unknown config keys not breaking decode.
+- `vendor.json` records the canonical **version** of each third-party package —
+  never the binaries, which would put hundreds of megabytes into a repo that is
+  cloned constantly. Apps record what they have in `App/Packages/<Name>/.vendor-version`
+  and `update.sh --check` reports drift. Contents are never copied: apps
+  deliberately vendor different product subsets, and ABCLearning excludes Firebase
+  Analytics because the Kids Category forbids third-party measurement SDKs —
+  overwriting that would be a store compliance problem caused by automation.
+- Config gains `whatsNew` (release notes per version, localised) and
+  `urls.appStore`, both checked by `validate_config.py`.
+
+### Changed
+- `.swiftlint.yml` excludes vendored third-party packages individually instead of
+  excluding `App/Packages` wholesale. SYSKit lives there and is ours — the blanket
+  exclusion would have left the one library shared by every app as the only code
+  nobody lints.
+- `setup.sh` and `update.sh` vendor and sync SYSKit; `update.sh` copies whole
+  package directories rather than file-by-file.
+
 ## [1.4.0] - 2026-08-20
 
 ### Added

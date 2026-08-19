@@ -247,49 +247,93 @@ Anything more (Firestore, RTDB, Functions) has to justify itself through
 [decisions/firebase-services.md](decisions/firebase-services.md) first —
 and then the separate dev/prod project rule applies.
 
-## 8. Remote config
+## 8. SYSKit — the shared layer
+
+Every app vendors two local packages from `SPM/`:
+
+| Package | Contents | Dependencies |
+|---|---|---|
+| `SYSKit` | config, network, logging, lifecycle, analytics plumbing | **none** |
+| `SYSKitFirebase` | the one file that imports Firebase | SYSKit + FirebaseKit |
+
+They are separate on purpose. `SYSKit` has no dependencies, so `swift test` runs
+it on a plain Linux runner — no Xcode, no simulator, no Firebase — which is what
+makes testing it cheap enough to actually do. A bug there ships to all five apps
+at once, so `pr.yml` runs those tests on every PR touching it.
+
+`SYSKit` contains **no screens**, and imports no UI framework. It returns state;
+the app renders it. That is why a UIKit app uses it unchanged — `await` works
+just as well from a scene delegate as from a SwiftUI `.task`.
+
+`.swiftlint.yml` excludes vendored third-party packages individually rather than
+excluding `App/Packages` wholesale, because SYSKit lives there too and it is ours.
+
+### Startup
+
+```swift
+switch await SYSBootstrap.start() {
+case .maintenance(let message):            // your screen
+case .updateRequired(let message, let url): // your screen
+case .onboarding:                          // your screens
+case .whatsNew(let notes):                 // your sheet
+case .ready:                               // home
+}
+```
+
+`SYSBootstrap` loads config locally, records the launch, gives the network a
+bounded moment, then decides. Apps write screens, not startup plumbing.
+
+### Remote config
 
 Every app ships `App/Resources/config.json` and serves that **same file** from
-its Firebase Hosting. One file, so a bundled copy and a served copy can never
-drift apart.
+its Firebase Hosting, so a bundled copy and a served copy cannot drift.
 
-`App/Source/Shared/SYSConfig.swift` is identical in every app and must not be
-forked. If an app already has its own config loader, replace it — two sources
-of truth for "is this flag on" is the bug this exists to prevent. App-specific
-values go under the `app` key and are read with `SYSConfig.shared.value(_:)`.
+Config normally applies on the **next** launch, so values stay stable for a whole
+session and nothing changes under the user mid-use. The gates — maintenance and
+force-update — are the one exception: `SYSBootstrap` waits briefly for a refresh
+before evaluating them, because a kill switch that needs a relaunch is not a kill
+switch. Offline, malformed, non-2xx, or older-than-current all fall back
+silently; the app can never end up worse off than the copy that shipped. The
+cache lives in Application Support, not Caches, which the system may purge.
 
-At launch:
+**Every key in config needs a handler in SYSKit, or it is dead config.**
+`rating.minSessions` sat inert for exactly this reason — nothing counted
+sessions. Config and handler ship together.
 
-```
-load()     bundled copy, or a cached fetch if its configVersion is higher
-refresh()  background fetch → validate → save → applies NEXT launch
-```
-
-A fetched config never applies mid-session, so values stay stable for a whole
-session and nothing changes under the user while they are using the app. No
-internet, malformed JSON, a non-2xx response, or a config older than the one in
-hand all fall back silently: the app can never end up worse off than the copy
-that shipped. The cache lives in Application Support rather than Caches, which
-the system may purge — that would quietly roll a user back to the bundled copy.
-
-The standard keys — `update`, `maintenance`, `flags`, `rating`, `urls`,
-`content`, `crossPromo` — are the same everywhere. `update.minimumVersion`
-drives `isUpdateRequired`; PES standardises the check and the comparison, not
-the blocking screen, which each app draws itself.
+| Config key | Handler |
+|---|---|
+| `update` | `SYSUpdate` |
+| `maintenance` | `SYSMaintenance` |
+| `whatsNew` | `SYSWhatsNew` |
+| `rating` | `SYSRating` + `SYSLifecycle` |
+| `flags`, `urls`, `crossPromo` | `SYSConfig` |
+| `app` | `SYSConfig.value(_:)` |
 
 Version comparison is numeric, never string: `"1.10.0"` sorts *below* `"1.9.0"`
-as a string, which works for years and then breaks at the first double-digit
-minor.
+as text, which works for years and then blocks every user at the first
+double-digit minor.
 
-`update.message` and `maintenance.message` accept either a bare string or a
-`{"en": …, "hi": …}` map, resolved against the device language with an English
-fallback.
+`pr.yml`'s `validate-config` job checks the schema on every PR touching the file,
+and refuses a `minimumVersion` above the version live on the App Store — that
+combination blocks 100% of users with no version available to update to.
 
-`pr.yml`'s `validate-config` job checks the schema on every PR that touches the
-file, and refuses a `minimumVersion` above the version currently live on the App
-Store — that combination blocks 100% of users with no version available to
-update to. It is the highest-blast-radius file in the repo and gets the
-strictest check.
+### Analytics
+
+The manager is shared; the vocabulary is not. Apps declare their own events
+conforming to `SYSAnalyticsEvent`, still at `App/Source/Shared/AnalyticsManager.swift`
+where the PR check greps for them.
+
+### Vendored third-party packages
+
+`vendor.json` in this repo records the canonical **version** of each third-party
+package — never the binaries, which would put hundreds of megabytes into a repo
+that gets cloned constantly. Each app records what it actually has in
+`App/Packages/<Name>/.vendor-version`, and `update.sh --check` reports drift.
+
+Contents are never copied between apps. Apps deliberately vendor different
+product subsets — ABCLearning excludes Firebase Analytics because the Kids
+Category forbids third-party measurement SDKs — and overwriting that would be a
+store compliance problem introduced by automation you trusted.
 
 ## 9. Git
 

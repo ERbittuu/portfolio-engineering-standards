@@ -21,6 +21,12 @@ CHECK=0
 if [[ "${1:-}" == "--check" ]]; then CHECK=1; shift; fi
 TARGET="$(cd "${1:?usage: update.sh [--check] <app-dir>}" && pwd)"
 
+# Whole directories PES owns, copied wholesale.
+MANAGED_DIRS=(
+  "App/Packages/SYSKit"
+  "App/Packages/SYSKitFirebase"
+)
+
 # Files PES owns. Anything not listed here belongs to the app.
 MANAGED=(
   ".github/workflows/pr.yml"
@@ -111,6 +117,49 @@ for rel in "${MANAGED[@]}"; do
     [[ "$rel" == *.sh ]] && chmod +x "$TARGET/$rel"
   fi
 done
+
+# SYSKit and its Firebase adapter: ours, so they are replaced wholesale.
+for rel in "${MANAGED_DIRS[@]}"; do
+  src="$PES_ROOT/SPM/$(basename "$rel")"
+  [[ -d "$src" ]] || continue
+
+  if [[ ! -d "$TARGET/$rel" ]]; then
+    echo "  ADD     $rel/"; missing=$((missing+1))
+  elif ! diff -rq "$src" "$TARGET/$rel" >/dev/null 2>&1; then
+    echo "  UPDATE  $rel/"; changed=$((changed+1))
+  fi
+
+  if [[ $CHECK -eq 0 ]]; then
+    mkdir -p "$TARGET/$(dirname "$rel")"
+    rm -rf "$TARGET/$rel"
+    # .build and .swiftpm are local artefacts, never vendored.
+    rsync -a --exclude '.build' --exclude '.swiftpm' "$src/" "$TARGET/$rel/"
+  fi
+done
+
+# Third-party packages: report version drift, never touch contents. Apps
+# deliberately vendor different product subsets — ABCLearning excludes Analytics
+# for the Kids Category — so copying contents could break store compliance.
+if [[ -f "$PES_ROOT/vendor.json" && -d "$TARGET/App/Packages" ]]; then
+  while IFS='|' read -r name want; do
+    [[ -n "$name" ]] || continue
+    dir="$TARGET/App/Packages/$name"
+    [[ -d "$dir" ]] || continue          # app does not use this package
+
+    have="$(tr -d '[:space:]' < "$dir/.vendor-version" 2>/dev/null || true)"
+    if [[ -z "$have" ]]; then
+      echo "  VENDOR  $name — no .vendor-version; recording $want"
+      [[ $CHECK -eq 0 ]] && printf '%s\n' "$want" > "$dir/.vendor-version"
+    elif [[ "$have" != "$want" ]]; then
+      echo "  VENDOR  $name  $have -> $want  (re-vendor by hand, then update .vendor-version)"
+    fi
+  done < <(python3 -c "
+import json,sys
+data = json.load(open('$PES_ROOT/vendor.json'))
+for name, meta in data['packages'].items():
+    print(f\"{name}|{meta['version']}\")
+")
+fi
 
 # Workflow files PES no longer ships. Left in place, but called out —
 # deleting a workflow is the app owner's call, not this script's.

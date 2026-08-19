@@ -137,6 +137,33 @@ jobs:
       - uses: actions/checkout@v7
       - run: python3 scripts/ci/validate_analytics_events.py
 
+  # SYSKit is shared by every app, so a bug here lands in all of them at once —
+  # which makes it both the most valuable thing to test and the cheapest. It has
+  # no dependencies and no UI, so it runs on a plain Linux runner: no Xcode, no
+  # simulator, a few seconds.
+  syskit-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: dorny/paths-filter@v3
+        id: changes
+        with:
+          filters: |
+            syskit:
+              - 'App/Packages/SYSKit/**'
+
+      - uses: swift-actions/setup-swift@v2
+        if: steps.changes.outputs.syskit == 'true'
+        with:
+          swift-version: "5.9"
+
+      - name: Run SYSKit tests
+        if: steps.changes.outputs.syskit == 'true'
+        working-directory: App/Packages/SYSKit
+        run: swift test
+
   # ── Store content ────────────────────────────────────────────────────────
   # Does fastlane/metadata/ have any of the landmines listed in MIGRATE.md's
   # gotcha table? Emoji in release notes, "UPDATE THIS" placeholders,

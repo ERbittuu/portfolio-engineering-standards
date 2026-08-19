@@ -26,8 +26,11 @@
 
   "urls": {
     "support": "https://{{OWNER}}.github.io/{{REPO}}/support",
-    "privacy": "https://{{OWNER}}.github.io/{{REPO}}/privacy"
+    "privacy": "https://{{OWNER}}.github.io/{{REPO}}/privacy",
+    "appStore": ""
   },
+
+  "whatsNew": {},
 
   "crossPromo": {
     "enabled": false,

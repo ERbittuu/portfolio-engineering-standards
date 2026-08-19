@@ -19,7 +19,15 @@ excluded:
   - .build
   - .swiftpm
   - DerivedData
-  - App/Packages     # vendored third-party source — not ours to lint
+  # Vendored third-party source — not ours to lint. Listed individually rather
+  # than excluding App/Packages wholesale, because SYSKit lives there too and it
+  # is ours: excluding the whole folder would leave the one library shared by
+  # every app as the only code nobody lints.
+  - App/Packages/FirebaseKit
+  - App/Packages/Kingfisher
+  - App/Packages/SnapKit
+  - App/Packages/Zip
+  - App/Packages/ZIPFoundation
 
 line_length:
   warning: 130

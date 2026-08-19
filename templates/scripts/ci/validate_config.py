@@ -23,7 +23,7 @@ from pathlib import Path
 CONFIG = Path(__file__).resolve().parents[2] / "App/Resources/config.json"
 ALLOWED_TOP_LEVEL = {
     "configVersion", "updatedAt", "update", "maintenance",
-    "flags", "rating", "urls", "content", "crossPromo", "app",
+    "flags", "rating", "urls", "content", "crossPromo", "whatsNew", "app",
 }
 REQUIRED_TOP_LEVEL = {"configVersion", "update", "flags", "app"}
 
@@ -95,6 +95,23 @@ def main() -> int:
                     f"update.minimumVersion {minimum} is above the version live on the "
                     f"App Store ({live}) — every user would be blocked with no update available"
                 )
+
+    # whatsNew: {"2.5.0": {"en": ["line", ...]}}. A wrong shape here means the
+    # release-notes screen silently shows nothing after an update.
+    whats_new = config.get("whatsNew")
+    if whats_new is not None:
+        if not isinstance(whats_new, dict):
+            errors.append("whatsNew must be an object keyed by version")
+        else:
+            for release, localized in whats_new.items():
+                if not is_version(release):
+                    errors.append(f"whatsNew key '{release}' is not a dotted numeric version")
+                if not isinstance(localized, dict):
+                    errors.append(f"whatsNew['{release}'] must be an object keyed by language")
+                    continue
+                for language, lines in localized.items():
+                    if not isinstance(lines, list) or not all(isinstance(line, str) for line in lines):
+                        errors.append(f"whatsNew['{release}']['{language}'] must be a list of strings")
 
     if errors:
         print("config.json validation failed:")
