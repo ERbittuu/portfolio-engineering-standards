@@ -33,12 +33,12 @@ jobs:
 
   # SYSKit ships to every app, so it is the highest-consequence code here and
   # the cheapest to test: no dependencies, no simulator, no Xcode.
+  # macOS, not Linux. SYSKit's networking uses URLSession's async API, which
+  # swift-corelibs-foundation does not provide — chasing that would be real work
+  # for a platform SYSKit never ships to. This repo is public, so macOS runners
+  # are free here.
   syskit-tests:
-    runs-on: ubuntu-latest
-    # Official Swift image rather than a third-party setup action, which 404'd
-    # on its first run here. SYSKit imports os only behind canImport, so it
-    # builds on Linux — which is what keeps this off a 10x-cost macOS runner.
-    container: swift:5.9
+    runs-on: macos-latest
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7

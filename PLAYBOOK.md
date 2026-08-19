@@ -262,10 +262,13 @@ Every app vendors two local packages from `SPM/`:
 | `SYSKit` | config, network, logging, lifecycle, analytics plumbing | **none** |
 | `SYSFirebase` | the one file that imports Firebase | SYSKit + FirebaseKit |
 
-They are separate on purpose. `SYSKit` has no dependencies, so `swift test` runs
-it on a plain Linux runner — no Xcode, no simulator, no Firebase — which is what
-makes testing it cheap enough to actually do. A bug there ships to all five apps
-at once, so `pr.yml` runs those tests on every PR touching it.
+They are separate on purpose: `SYSKit` has no dependencies, so it builds and
+tests without Xcode, a simulator or Firebase. Its tests run in **this repo's**
+CI, not in each app — the package is vendored unchanged, so re-testing it in five
+private repos costs macOS minutes for no new information. They run on macOS
+rather than Linux because `SYSNetwork` uses URLSession's async API, which
+swift-corelibs-foundation does not provide; that is a platform SYSKit never ships
+to, so it is not worth working around.
 
 `SYSKit` contains **no screens**, and imports no UI framework. It returns state;
 the app renders it. That is why a UIKit app uses it unchanged — `await` works

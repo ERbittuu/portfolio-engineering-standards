@@ -3,10 +3,16 @@
 ## [1.9.1] - 2026-08-20
 
 ### Fixed
-- CI's first run failed: `swift-actions/setup-swift` returned 404. Replaced with
-  the official `swift:5.9` container, and `SYSLogger` now imports `os` behind
-  `canImport`, so SYSKit genuinely builds on Linux — the claim that let its tests
-  run on a cheap runner rather than a 10x-cost macOS one was untrue until now.
+- CI's first run failed: `swift-actions/setup-swift` returned 404. SYSKit's tests
+  now run on macOS, which is free for this public repo and is the platform SYSKit
+  ships to. Linux was the original plan, but `SYSNetwork` uses URLSession's async
+  API and swift-corelibs-foundation does not provide it — working around that for
+  a platform SYSKit never runs on is not worth it. `SYSLogger` and `SYSNetwork`
+  still guard their imports with `canImport`, which costs nothing and keeps the
+  door open.
+- `pr.yml` no longer re-runs SYSKit's tests in every app. The package is vendored
+  unchanged and tested at source here, so running it again in five private repos
+  bought no new information and would have billed macOS minutes to do it.
 
 ### Removed
 - The git hooks briefly installed on this repo. PES defines how *apps* work and
