@@ -27,7 +27,10 @@
 - `main.yml`'s `store-metadata` and `store-screenshots` also run on `release/*`
   pushes, so App Store text and screenshots are in place before you submit.
   `deploy-data` stays main-only, deliberately: content goes live the moment it
-  deploys, with no review in between.
+  deploys, with no review in between. Path diffing happens only on `main` — the
+  first push of a release branch has nothing to diff against, so store content
+  always syncs there rather than depending on how an action handles an empty
+  base.
 - `release.yml` verifies the release and tag exist after creating them. A green
   step is not proof — this reported success while leaving no tag and no release
   behind on a real app.

@@ -39,8 +39,15 @@ permissions:
   contents: read
 
 jobs:
-  # Which paths changed. On workflow_dispatch there is no diff to inspect,
-  # so the `job` input decides instead.
+  # Decides which jobs run.
+  #
+  # Diffing only happens on main. On a release branch the first push has
+  # nothing to diff against — the branch did not exist a moment earlier —
+  # so store content simply always syncs there. That is what you want
+  # anyway: pushing a release branch means preparing a listing, and
+  # re-sending identical text to Apple costs nothing.
+  #
+  # On workflow_dispatch there is no diff either, so the `job` input decides.
   changes:
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -53,7 +60,7 @@ jobs:
 
       - uses: dorny/paths-filter@v3
         id: filter
-        if: github.event_name == 'push'
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         with:
           filters: |
             metadata:
@@ -77,6 +84,11 @@ jobs:
                 echo "$j=false" >> "$GITHUB_OUTPUT"
               fi
             done
+          elif [ "${{ github.ref }}" != "refs/heads/main" ]; then
+            # Release branch: always sync the listing, never deploy content.
+            echo "metadata=true" >> "$GITHUB_OUTPUT"
+            echo "screenshots=true" >> "$GITHUB_OUTPUT"
+            echo "data=false" >> "$GITHUB_OUTPUT"
           else
             echo "metadata=${{ steps.filter.outputs.metadata }}" >> "$GITHUB_OUTPUT"
             echo "screenshots=${{ steps.filter.outputs.screenshots }}" >> "$GITHUB_OUTPUT"
