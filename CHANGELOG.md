@@ -1,5 +1,23 @@
 # Changelog
 
+## [1.9.1] - 2026-08-20
+
+### Fixed
+- CI's first run failed: `swift-actions/setup-swift` returned 404. Replaced with
+  the official `swift:5.9` container, and `SYSLogger` now imports `os` behind
+  `canImport`, so SYSKit genuinely builds on Linux — the claim that let its tests
+  run on a cheap runner rather than a 10x-cost macOS one was untrue until now.
+
+### Removed
+- The git hooks briefly installed on this repo. PES defines how *apps* work and
+  is not an app: nothing here has `App/Packages`, `App/Resources/config.json`,
+  `App/*.xcodeproj` or `App/Source`, so five of the checks silently no-opped
+  while looking like protection, and the one that mattered tested nothing because
+  the package lives at `SPM/SYSKit` rather than `App/Packages/SYSKit`. The
+  branch-name rule did not apply either — releases here come from `main` via
+  `release.sh`, not release branches. CI stays: testing the output this repo
+  ships is not the same as applying app rules to it.
+
 ## [1.9.0] - 2026-08-20
 
 ### Added
@@ -10,8 +28,6 @@
   a throwaway app from `setup.sh` and checks it passes its own PR checks. That
   last one exists because it has already failed: a scaffolded app had no
   `AnalyticsManager.swift` while the guard for it ran on every PR.
-- **PES now runs the hooks it ships.** It shipped hook standards while having
-  none installed on itself.
 - `scripts/lint-project.sh` — build settings that compile and are still wrong.
   CI builds the app, so anything that compiles passes: a literal
   `CFBundleShortVersionString` silently beats `MARKETING_VERSION`, so CI stamps

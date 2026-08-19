@@ -382,24 +382,20 @@ than taste.
 Both are escapable with `--no-verify`. A hook you cannot bypass gets uninstalled
 the first time it is wrong; one you can bypass gets kept.
 
-## 10. This repo follows its own rules
+## 10. This repo is the source of truth, not a subject of it
 
-PES has its own CI:
-`validate.sh`, the SYSKit tests, and a scaffold job that builds a throwaway app
-from `setup.sh` and checks it passes its own PR checks.
+PES defines how *apps* work; it is not an app. Its hooks, its layout rules and
+its branch conventions describe app repos, and installing them here produced
+five checks that silently no-opped — nothing in this repo has `App/Packages`,
+`App/Resources/config.json`, `App/*.xcodeproj` or `App/Source`. A rule applied
+where it does not apply is not discipline, it is decoration.
 
-That last job exists because it has already failed: a scaffolded app had no
-`AnalyticsManager.swift` while the guard for it ran on every PR, so every new app
-was red from its first commit. A standards repo without CI is a standards repo
-whose rules are advisory.
-
-Its hooks are its own, **not** the app template. The app hooks check
-`App/Packages`, `App/Resources/config.json`, `App/*.xcodeproj` and `App/Source` —
-none of which exist here, so installing them verbatim produced five no-ops
-wearing the costume of protection, while the one check that mattered silently did
-nothing because the package lives at `SPM/SYSKit` rather than
-`App/Packages/SYSKit`. Self-applying a standard only means something where the
-standard actually applies.
+What this repo does have is CI over its own output: `validate.sh`, the SYSKit
+tests, and a scaffold job that builds a throwaway app from `setup.sh` and checks
+it passes its own PR checks. That is not self-application — it is testing the
+thing this repo ships. It earned its place immediately: the scaffold job exists
+because a scaffolded app once had no `AnalyticsManager.swift` while the guard for
+it ran on every PR, so every new app was red from its first commit.
 
 ## 11. Git
 
