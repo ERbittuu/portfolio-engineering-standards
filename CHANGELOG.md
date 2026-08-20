@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.11.1] - 2026-08-20
+
+### Fixed
+- `Data/build.py` accepts `--verbose`. `pr.yml`'s `data-ci` job has always run
+  `build.py --clean --verbose`, but the template seeded in 1.11.0 declared only
+  `--clean` — and argparse exits 2 on an unknown argument, so the first app to
+  add hosted data failed its PR check with `unrecognized arguments: --verbose`,
+  an error about the flag rather than about the data. The workflow and the
+  script it runs are one contract and have to be read together.
+
 ## [1.11.0] - 2026-08-20
 
 ### Changed
