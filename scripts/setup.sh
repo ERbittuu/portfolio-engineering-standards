@@ -77,6 +77,7 @@ copy scripts/ci/validate_config.py            scripts/ci/validate_config.py
 
 # The config this app ships with and serves. SYSConfig itself lives in SYSKit.
 copy app/config.json      App/Resources/config.json
+copy app/firebase.json    firebase.json
 
 # The app's analytics vocabulary. Fixed path — the PR check greps it, so a
 # scaffolded app without this file fails analytics-event-guard on its first PR.

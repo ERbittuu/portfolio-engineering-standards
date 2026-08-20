@@ -1,0 +1,17 @@
+{
+  "_comment": "Hosting serves the same config.json the app ships with, so the bundled and served copies cannot drift. CI stages files into _hosting before deploying; nothing is served straight from the app bundle path.",
+  "hosting": {
+    "public": "_hosting",
+    "ignore": ["**/.*"],
+    "headers": [
+      {
+        "source": "config.json",
+        "headers": [{ "key": "Cache-Control", "value": "public, max-age=300" }]
+      },
+      {
+        "source": "**/*.zip",
+        "headers": [{ "key": "Cache-Control", "value": "public, max-age=3600" }]
+      }
+    ]
+  }
+}

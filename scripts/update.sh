@@ -33,6 +33,7 @@ MANAGED_DIRS=(
 SEEDED=(
   "App/Resources/config.json|app/config.json"
   "App/Source/Shared/AnalyticsManager.swift|app/AnalyticsManager.swift"
+  "firebase.json|app/firebase.json"
 )
 
 # Files PES owns. Anything not listed here belongs to the app.

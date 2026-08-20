@@ -26,6 +26,7 @@ on:
       - "fastlane/Deliverfile"
       - "fastlane/screenshots/**"
       - "Data/**"
+      - "App/Resources/config.json"
       - "firebase.json"
   workflow_dispatch:
     inputs:
@@ -33,7 +34,7 @@ on:
         description: "Which job to run"
         type: choice
         default: all
-        options: [all, metadata, screenshots, data]
+        options: [all, metadata, screenshots, data, config]
 
 permissions:
   contents: read
@@ -53,6 +54,7 @@ jobs:
     timeout-minutes: 5
     outputs:
       metadata: ${{ steps.decide.outputs.metadata }}
+      config: ${{ steps.decide.outputs.config }}
       screenshots: ${{ steps.decide.outputs.screenshots }}
       data: ${{ steps.decide.outputs.data }}
     steps:
@@ -77,7 +79,7 @@ jobs:
         run: |
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             WANT="${{ inputs.job }}"
-            for j in metadata screenshots data; do
+            for j in metadata screenshots data config; do
               if [ "$WANT" = "all" ] || [ "$WANT" = "$j" ]; then
                 echo "$j=true" >> "$GITHUB_OUTPUT"
               else
@@ -89,10 +91,12 @@ jobs:
             echo "metadata=true" >> "$GITHUB_OUTPUT"
             echo "screenshots=true" >> "$GITHUB_OUTPUT"
             echo "data=false" >> "$GITHUB_OUTPUT"
+            echo "config=false" >> "$GITHUB_OUTPUT"
           else
             echo "metadata=${{ steps.filter.outputs.metadata }}" >> "$GITHUB_OUTPUT"
             echo "screenshots=${{ steps.filter.outputs.screenshots }}" >> "$GITHUB_OUTPUT"
             echo "data=${{ steps.filter.outputs.data }}" >> "$GITHUB_OUTPUT"
+            echo "config=${{ steps.filter.outputs.config }}" >> "$GITHUB_OUTPUT"
           fi
 
   # Push App Store metadata (TEXT ONLY) to App Store Connect.
@@ -144,6 +148,48 @@ jobs:
           ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
           ASC_KEY_CONTENT: ${{ secrets.ASC_KEY_CONTENT }}
         run: bundle exec fastlane screenshots
+
+  # Publishes the very same config.json the app ships with, so the bundled and
+  # served copies cannot drift. main only: config takes effect on the next
+  # launch for flags, but the maintenance and force-update gates read it during
+  # startup, so it must not go live ahead of the build it describes.
+  deploy-config:
+    needs: changes
+    if: |
+      needs.changes.outputs.config == 'true' &&
+      (github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch')
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    concurrency:
+      group: deploy-config
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Stage config for Hosting
+        run: |
+          mkdir -p _hosting
+          cp App/Resources/config.json _hosting/config.json
+
+      - uses: FirebaseExtended/action-hosting-deploy@v0
+        with:
+          repoToken: ${{ github.token }}
+          firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          projectId: "{{FIREBASE_PROJECT_ID}}"
+          channelId: live
+
+      # A green deploy is not proof the file is being served — deliver has
+      # taught that lesson already elsewhere in this system.
+      - name: Smoke test — served config matches what we shipped
+        run: |
+          SERVED=$(curl -sSf "https://{{FIREBASE_PROJECT_ID}}.web.app/config.json")
+          echo "$SERVED" | python3 -c "import json,sys; json.load(sys.stdin)" || {
+            echo "::error::served config.json is not valid JSON"; exit 1; }
+          LOCAL=$(python3 -c "import json;print(json.load(open('App/Resources/config.json'))['configVersion'])")
+          REMOTE=$(echo "$SERVED" | python3 -c "import json,sys;print(json.load(sys.stdin)['configVersion'])")
+          [ "$LOCAL" = "$REMOTE" ] || {
+            echo "::error::served configVersion $REMOTE does not match shipped $LOCAL"; exit 1; }
+          echo "Serving configVersion $REMOTE"
 
   # {{ OPTIONAL — delete this job if the app ships no remote content.
   #    Deploys to Firebase Hosting. Secret: FIREBASE_SERVICE_ACCOUNT

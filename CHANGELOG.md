@@ -1,5 +1,26 @@
 # Changelog
 
+## [1.10.0] - 2026-08-20
+
+### Added
+- `main.yml` gains a `deploy-config` job, and `firebase.json` is now a template.
+  Config was validated on every PR and **deployed by nothing** — the remote half
+  of remote config did not exist, so every app would have shipped reading only
+  its bundled copy while appearing fully wired. Found by migrating a real app.
+  It publishes the same `config.json` the app ships, then verifies the served
+  `configVersion` matches what was shipped; a green deploy is not proof the file
+  is being served.
+- `update.sh` seeds `firebase.json` alongside `config.json` and
+  `AnalyticsManager.swift` for apps adopting SYSKit later.
+
+### Fixed
+- The vendored-source pre-commit hook blocked `.vendor-version`, which
+  `update.sh` itself writes into each vendored package — PES tooling produced a
+  change PES hooks refused to commit.
+- `update.sh` now seeds app-owned files an existing app is missing. `setup.sh`
+  ships them for new apps, so only apps adopting SYSKit later hit this, and they
+  hit it as a red `validate-config` with no obvious cause.
+
 ## [1.9.2] - 2026-08-20
 
 ### Fixed
