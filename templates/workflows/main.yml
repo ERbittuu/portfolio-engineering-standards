@@ -183,15 +183,31 @@ jobs:
 
       # A green deploy is not proof the file is being served — deliver has
       # taught that lesson already elsewhere in this system.
+      # Hosting reports a successful deploy before its CDN stops serving the
+      # previous copy — seconds, but reliably more than zero. Checked once and
+      # immediately, this step fails on a deploy that worked, which is how a
+      # check becomes something people re-run instead of read.
       - name: Smoke test — served config matches what we shipped
         run: |
-          SERVED=$(curl -sSf "https://{{FIREBASE_PROJECT_ID}}.web.app/config.json")
-          echo "$SERVED" | python3 -c "import json,sys; json.load(sys.stdin)" || {
-            echo "::error::served config.json is not valid JSON"; exit 1; }
+          BASE="https://{{FIREBASE_PROJECT_ID}}.web.app"
           LOCAL=$(python3 -c "import json;print(json.load(open('App/Resources/config.json'))['configVersion'])")
-          REMOTE=$(echo "$SERVED" | python3 -c "import json,sys;print(json.load(sys.stdin)['configVersion'])")
+
+          for attempt in $(seq 1 10); do
+            # Cache-buster: without it the edge can keep answering from cache
+            # for the whole retry window and the wait buys nothing.
+            SERVED=$(curl -sSf -H 'Cache-Control: no-cache' \
+                       "$BASE/config.json?ci=${GITHUB_RUN_ID:-0}-$attempt" || true)
+            REMOTE=$(printf '%s' "$SERVED" \
+                       | python3 -c "import json,sys;print(json.load(sys.stdin)['configVersion'])" 2>/dev/null || true)
+            [ -n "$REMOTE" ] && [ "$REMOTE" = "$LOCAL" ] && break
+            echo "attempt $attempt: serving ${REMOTE:-<no valid JSON>}, want $LOCAL — waiting"
+            sleep 6
+          done
+
+          printf '%s' "$SERVED" | python3 -c "import json,sys; json.load(sys.stdin)" || {
+            echo "::error::served config.json is not valid JSON"; exit 1; }
           [ "$LOCAL" = "$REMOTE" ] || {
-            echo "::error::served configVersion $REMOTE does not match shipped $LOCAL"; exit 1; }
+            echo "::error::served configVersion $REMOTE does not match shipped $LOCAL after 60s"; exit 1; }
           echo "Serving configVersion $REMOTE"
 
   # {{ OPTIONAL — delete this job if the app ships no remote content.
@@ -225,19 +241,33 @@ jobs:
       # "file exists in the repo but Hosting isn't actually serving it"
       # class of bug before real users do, given the blast radius here.
       # Adjust the manifest path and the JSON key for your own index file.
+      # Same propagation window as deploy-config: the deploy is reported done
+      # before the edge stops serving the previous manifest.
       - name: Smoke test — live manifest and one item bundle are reachable
         run: |
           BASE="https://{{FIREBASE_PROJECT_ID}}.web.app"
-          MANIFEST=$(curl -sSf "$BASE/manifest.json")
-          echo "$MANIFEST" | python3 -c "import json,sys; json.load(sys.stdin)" || {
-            echo "::error::manifest.json at $BASE is not valid JSON"
+          for attempt in $(seq 1 10); do
+            MANIFEST=$(curl -sSf -H 'Cache-Control: no-cache' \
+                         "$BASE/manifest.json?ci=${GITHUB_RUN_ID:-0}-$attempt" || true)
+            printf '%s' "$MANIFEST" | python3 -c "import json,sys; json.load(sys.stdin)" >/dev/null 2>&1 && break
+            echo "attempt $attempt: manifest not readable yet — waiting"
+            sleep 6
+          done
+
+          printf '%s' "$MANIFEST" | python3 -c "import json,sys; json.load(sys.stdin)" || {
+            echo "::error::manifest.json at $BASE is not valid JSON after 60s"
             exit 1
           }
 
           BUNDLE_PATH=$(echo "$MANIFEST" | python3 -c "import json,sys; print(json.load(sys.stdin)['items'][0]['bundle'])")
           BUNDLE_PATH="${BUNDLE_PATH#/}"
+          for attempt in $(seq 1 10); do
+            curl -sSfI "$BASE/$BUNDLE_PATH" > /dev/null 2>&1 && break
+            echo "attempt $attempt: $BUNDLE_PATH not reachable yet — waiting"
+            sleep 6
+          done
           curl -sSfI "$BASE/$BUNDLE_PATH" > /dev/null || {
-            echo "::error::sample item bundle $BASE/$BUNDLE_PATH is not reachable"
+            echo "::error::sample item bundle $BASE/$BUNDLE_PATH is not reachable after 60s"
             exit 1
           }
 

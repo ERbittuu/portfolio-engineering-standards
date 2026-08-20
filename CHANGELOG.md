@@ -1,5 +1,16 @@
 # Changelog
 
+## [1.10.5] - 2026-08-20
+
+### Fixed
+- Both Hosting smoke tests checked once, immediately, with no cache-busting.
+  Firebase reports a deploy successful before its CDN stops serving the previous
+  copy, so `deploy-config` failed with "served configVersion 3 does not match
+  shipped 4" on a deploy that had worked — the same URL served 4 a few seconds
+  later. Both now retry for up to 60s against a cache-busted URL and only fail
+  if the content never catches up. A check that fails on timing is one people
+  learn to re-run rather than read, which costs more than the bug it catches.
+
 ## [1.10.4] - 2026-08-20
 
 ### Fixed
