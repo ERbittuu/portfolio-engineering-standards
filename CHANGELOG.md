@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.10.4] - 2026-08-20
+
+### Fixed
+- `main.yml` never deployed config on a push. 1.10.0 added the `deploy-config`
+  job and the `config` output, but not the `config` entry in the `paths-filter`
+  it reads — so `steps.filter.outputs.config` was always empty, always falsy,
+  and the job was skipped on every push to main. Only `workflow_dispatch` could
+  run it, because that path sets the outputs from `inputs.job` instead of the
+  filter. Verifying `deploy-config` by dispatching it therefore proved nothing
+  about the path that actually matters, and a real app merged a config change
+  to main and kept serving the previous version. This is the same defect
+  1.10.0 fixed one layer up: the job existed, and nothing could reach it.
+
 ## [1.10.3] - 2026-08-20
 
 Everything here was found pushing Colorful's first release to the App Store.

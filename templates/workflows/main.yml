@@ -73,6 +73,9 @@ jobs:
             data:
               - 'Data/**'
               - 'firebase.json'
+            config:
+              - 'App/Resources/config.json'
+              - 'firebase.json'
 
       - name: Decide what to run
         id: decide
