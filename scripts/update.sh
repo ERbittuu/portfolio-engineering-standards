@@ -54,6 +54,7 @@ MANAGED=(
   "scripts/ci/validate_analytics_events.py"
   "scripts/ci/validate_config.py"
   "scripts/ci/validate_urls.py"
+  "scripts/ci/validate_sys_adoption.py"
   "App/Source/Shared/SYSConfig.swift"
   ".editorconfig"
   ".gitattributes"

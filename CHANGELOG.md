@@ -1,5 +1,31 @@
 # Changelog
 
+## [1.15.0] - 2026-08-20
+
+### Added
+- **`scripts/ci/validate_sys_adoption.py`**, wired into `pr.yml`. SYSKit only
+  delivers consistency while apps actually use it, and nothing stopped someone
+  reaching for `UserDefaults.standard` or `URLSession.shared` directly — it works,
+  it is one line, and the app quietly stops sharing the behaviour everything else
+  relies on. By the time that matters, the divergence is old and expensive.
+
+  Each rule names something SYSKit already does and fails the build when app code
+  does it another way: defaults access that loses the absent-vs-false distinction,
+  networking without the shared ETag and offline handling, a review prompt that
+  can spend all three of Apple's yearly requests on one user, a hardcoded
+  `*.web.app` URL that points a release at another project's content, analytics
+  sent outside the enum the limit checks read, and crash reporting that drags
+  Firebase into app code. It also fails an `@main` app that does not conform to
+  `SYSBootstrappedApp`.
+
+  `sys-ok: <reason>` on the line or in the comment block above it opts out. The
+  reason is required — an opt-out nobody has to explain is a rule that quietly
+  stops applying. Colorful uses exactly one, for launch arguments, which arrive
+  through the defaults domain and are not preferences.
+
+  Verified by planting violations in a real app: three rules fired, and the check
+  went clean again when they were removed.
+
 ## [1.14.0] - 2026-08-20
 
 ### Added

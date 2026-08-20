@@ -175,6 +175,17 @@ jobs:
         if: steps.changes.outputs.metadata == 'true' || steps.changes.outputs.config == 'true'
         run: python3 scripts/ci/validate_urls.py
 
+  # SYSKit only delivers consistency while apps actually use it. Nothing stops
+  # someone reaching for UserDefaults or URLSession directly — it works, it is one
+  # line, and the app quietly stops sharing the behaviour everything else relies
+  # on. By the time that matters the divergence is old and expensive.
+  sys-adoption:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+      - run: python3 scripts/ci/validate_sys_adoption.py
+
   # Exact pixel dimensions per device class, complete locale sets, no
   # corrupt files. See scripts/ci/validate_screenshots.py — update the
   # REQUIRED dict there to match the device sizes you actually ship.
