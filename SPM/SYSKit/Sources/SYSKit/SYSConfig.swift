@@ -133,6 +133,23 @@ public struct SYSConfigData: Codable {
     public var app: [String: SYSValue]?
 
     public init() {}
+
+    /// The `app` section decoded into a type the app defines.
+    ///
+    /// Lives here rather than on the manager so it can be exercised against a
+    /// decoded config directly, with no launch, no disk and no network.
+    public func app<T: Decodable>(as type: T.Type) -> T? {
+        guard let section = app else { return nil }
+        do {
+            // SYSValue is Codable and models nested objects, arrays and null, so
+            // this round-trip is lossless — no need to retain the raw JSON.
+            let json = try JSONEncoder().encode(section)
+            return try JSONDecoder().decode(type, from: json)
+        } catch {
+            SYSLogger.error("config: app section did not decode as \(type) — \(error)")
+            return nil
+        }
+    }
 }
 
 // MARK: - Manager
@@ -199,7 +216,10 @@ public final class SYSConfig {
     /// applied. Failures are silent by design — offline is normal.
     @discardableResult
     public func refresh() async -> Bool {
-        guard let remoteURL else { return false }
+        // Not configured means "the usual place", not "no remote config". The
+        // URL is derivable from the Firebase project the app already ships, so
+        // requiring every app to pass it only creates a way to get it wrong.
+        guard let remoteURL = remoteURL ?? SYSHosting.configURL(bundle: bundle) else { return false }
 
         do {
             let etag = SYSSettings.shared[Self.etagKey]
@@ -241,6 +261,29 @@ public final class SYSConfig {
 
     /// App-specific value from the `app` object.
     public func value(_ key: String) -> SYSValue? { data.app?[key] }
+
+    /// The `app` section decoded into a type the app defines.
+    ///
+    /// `value("someKey")?.intValue` works, but every app ends up writing the same
+    /// unwrapping by hand and a typo in a key is a silent nil rather than a
+    /// compile error. Declaring the shape once and decoding into it moves that
+    /// mistake to build time:
+    ///
+    /// ```swift
+    /// struct ColorfulConfig: Decodable {
+    ///     let maxRecentPages: Int
+    ///     let showSeasonalPack: Bool
+    /// }
+    /// let tuning = SYSConfig.shared.app(as: ColorfulConfig.self)
+    /// ```
+    ///
+    /// Returns nil if the section is absent or does not match the type, and logs
+    /// why — a config the app cannot read must not be worse than no config at
+    /// all, so the caller falls back to its own defaults rather than failing.
+    ///
+    /// Decoded on each call, with the same liveness as `value(_:)`. The section is
+    /// small, but hold the result rather than calling it from a view body.
+    public func app<T: Decodable>(as type: T.Type) -> T? { data.app(as: type) }
 
     public var currentVersion: String { SYSVersion.current(bundle: bundle) }
 

@@ -56,6 +56,36 @@ public enum SYSAssetsError: Error, Equatable, Sendable {
     case missingRequiredPack(id: String)
     /// `configure` was never called.
     case notConfigured
+    /// The pack arrived and did not match the type the app asked for.
+    case decoding(String)
+
+    /// Whether offering "try again" is honest.
+    ///
+    /// Apps kept deciding this individually and would eventually disagree — a
+    /// retry button on a 404 re-fetches the same 404, and on a hash mismatch it
+    /// re-downloads the same bad bytes. Both need a fix on the server, not
+    /// another tap.
+    public var isRetryable: Bool {
+        switch self {
+        case .offline:
+            return true
+        case let .server(status):
+            // 5xx is usually transient; 4xx will answer identically next time.
+            return status >= 500
+        case .corrupt, .unreadableManifest, .decoding:
+            // The bytes are what the server published; asking again gets them
+            // again. Either the app or the pack has to change.
+            return false
+        case .unsupportedManifest, .missingRequiredPack, .notConfigured:
+            return false
+        }
+    }
+
+    /// Whether the user needs a newer build rather than another attempt.
+    public var requiresAppUpdate: Bool {
+        if case .unsupportedManifest = self { return true }
+        return false
+    }
 }
 
 /// Progress through a `prepareRequired` run, for apps that show a bar.
@@ -105,10 +135,20 @@ public actor SYSAssets {
     private let network: SYSNetwork
     private let fileManager: FileManager
 
-    private var baseURL: URL?
+    private var explicitBaseURL: URL?
+    /// Configured, or the app's own Firebase Hosting site. Requiring every app to
+    /// pass a URL it already ships in GoogleService-Info.plist only creates a way
+    /// to point a release at the wrong project.
+    private var baseURL: URL? { explicitBaseURL ?? SYSHosting.siteURL() }
     private var explicitRequired: [String] = []
     private var cachedManifest: SYSAssetManifest?
     private var manifestETag: String?
+    /// Downloads already running, keyed by pack id.
+    ///
+    /// Two taps on the same category, or a category tapped while startup is still
+    /// fetching it, otherwise download the same bytes twice. Every app that
+    /// downloads content hits this, so it is solved here rather than in each app.
+    private var inFlight: [String: Task<Result<Data, SYSAssetsError>, Never>] = [:]
 
     /// Attempts per pack before giving up, with a short backoff between them.
     /// The app's retry button is the real recovery path; this only rides out a
@@ -127,8 +167,11 @@ public actor SYSAssets {
     ///   - baseURL: site root, e.g. `https://myapp.web.app`.
     ///   - required: pack ids the app cannot start without. Leave empty to rely
     ///     on the manifest's own `required` flags.
-    public func configure(baseURL: URL, required: [String] = []) {
-        self.baseURL = baseURL
+    /// Only needed for a custom domain, a staging site, or an explicit required
+    /// list. Otherwise the site is derived and the manifest's own `required`
+    /// flags decide what startup waits for.
+    public func configure(baseURL: URL? = nil, required: [String] = []) {
+        self.explicitBaseURL = baseURL
         self.explicitRequired = required
     }
 
@@ -173,6 +216,19 @@ public actor SYSAssets {
     public func cachedData(for pack: SYSAssetPack) -> Data? {
         guard let url = try? localURL(for: pack) else { return nil }
         return try? Data(contentsOf: url)
+    }
+
+    /// Every pack already on disk, as (id, bytes).
+    ///
+    /// An app that decodes its packs at startup would otherwise walk the manifest,
+    /// test each entry for a cached copy and read it — identical work in every
+    /// app. Decoding stays with the app, because only it knows what is inside.
+    public func cachedPacks() -> [(id: String, data: Data)] {
+        guard let manifest = cachedManifest ?? loadPersistedManifest() else { return [] }
+        return manifest.items.compactMap { pack in
+            guard let data = cachedData(for: pack) else { return nil }
+            return (id: pack.id, data: data)
+        }
     }
 
     // MARK: Manifest
@@ -241,8 +297,11 @@ public actor SYSAssets {
     /// Safe to call again — already-cached packs are skipped, so an app's retry
     /// button costs only what is actually still missing.
     @discardableResult
+    /// `progress` is delivered on the main actor: it exists to drive a progress
+    /// bar, and every app was otherwise wrapping it in a `Task { @MainActor in }`
+    /// to get there.
     public func prepareRequired(
-        progress: (@Sendable (SYSAssetProgress) -> Void)? = nil
+        progress: (@MainActor @Sendable (SYSAssetProgress) -> Void)? = nil
     ) async -> Result<Void, SYSAssetsError> {
         let manifestResult = await refreshManifest()
         guard case let .success(manifest) = manifestResult else {
@@ -260,20 +319,20 @@ public actor SYSAssets {
         var downloaded = 0
         var completed = wanted.count - outstanding.count
 
-        progress?(SYSAssetProgress(completedPacks: completed,
-                                   totalPacks: wanted.count,
-                                   bytesDownloaded: 0,
-                                   totalBytes: totalBytes))
+        await progress?(SYSAssetProgress(completedPacks: completed,
+                                         totalPacks: wanted.count,
+                                         bytesDownloaded: 0,
+                                         totalBytes: totalBytes))
 
         for pack in outstanding {
-            switch await fetch(pack) {
+            switch await fetchOnce(pack) {
             case .success:
                 completed += 1
                 downloaded += pack.bytes ?? 0
-                progress?(SYSAssetProgress(completedPacks: completed,
-                                           totalPacks: wanted.count,
-                                           bytesDownloaded: downloaded,
-                                           totalBytes: totalBytes))
+                await progress?(SYSAssetProgress(completedPacks: completed,
+                                                 totalPacks: wanted.count,
+                                                 bytesDownloaded: downloaded,
+                                                 totalBytes: totalBytes))
             case let .failure(error):
                 SYSLogger.error("assets: required pack \(pack.id) failed — \(error)")
                 return .failure(error)
@@ -300,9 +359,59 @@ public actor SYSAssets {
             return .failure(.missingRequiredPack(id: packID))
         }
         if let data = cachedData(for: pack) { return .success(data) }
-        switch await fetch(pack) {
-        case .success(let data): return .success(data)
-        case .failure(let error): return .failure(error)
+        return await fetchOnce(pack)
+    }
+
+    /// `fetch`, but only one download per pack is ever in flight.
+    private func fetchOnce(_ pack: SYSAssetPack) async -> Result<Data, SYSAssetsError> {
+        if let running = inFlight[pack.id] { return await running.value }
+
+        let task = Task { [weak self] in
+            guard let self else { return Result<Data, SYSAssetsError>.failure(.notConfigured) }
+            return await self.fetch(pack)
+        }
+        inFlight[pack.id] = task
+        let result = await task.value
+        inFlight[pack.id] = nil
+        return result
+    }
+
+    /// One pack, downloaded if needed and decoded into the app's own type.
+    ///
+    /// The app owns the shape of a pack; this owns fetching, verifying and
+    /// caching it. Handing the type in means no app writes the download-then-
+    /// decode dance, and none of them can disagree about what a failure means.
+    public func ensure<T: Decodable & Sendable>(
+        _ packID: String,
+        as type: T.Type
+    ) async -> Result<T, SYSAssetsError> {
+        switch await ensure(packID) {
+        case let .success(data):
+            return decode(data, as: type, packID: packID)
+        case let .failure(error):
+            return .failure(error)
+        }
+    }
+
+    /// Every cached pack, decoded. Skips packs that do not match the type rather
+    /// than failing the lot: an app may host more than one kind of pack.
+    public func cachedPacks<T: Decodable & Sendable>(as type: T.Type) -> [(id: String, value: T)] {
+        cachedPacks().compactMap { pack in
+            guard case let .success(value) = decode(pack.data, as: type, packID: pack.id) else { return nil }
+            return (id: pack.id, value: value)
+        }
+    }
+
+    private func decode<T: Decodable>(
+        _ data: Data,
+        as type: T.Type,
+        packID: String
+    ) -> Result<T, SYSAssetsError> {
+        do {
+            return .success(try JSONDecoder().decode(type, from: data))
+        } catch {
+            SYSLogger.error("assets: pack \(packID) did not decode as \(type) — \(error)")
+            return .failure(.decoding("\(packID): \(error)"))
         }
     }
 

@@ -297,3 +297,121 @@ final class SYSAssetsTests: XCTestCase {
         XCTAssertEqual(SYSAssetsError.unsupportedManifest(version: 2), .unsupportedManifest(version: 2))
     }
 }
+
+// MARK: - SYSAssets handler logic centralised from the app
+
+final class SYSAssetsHandlerTests: XCTestCase {
+    func testRetryIsOfferedOnlyWhenItCouldHelp() {
+        // Offering "try again" for a fault the server has to fix teaches people
+        // to tap it forever.
+        XCTAssertTrue(SYSAssetsError.offline.isRetryable)
+        XCTAssertTrue(SYSAssetsError.server(status: 500).isRetryable)
+        XCTAssertTrue(SYSAssetsError.server(status: 503).isRetryable)
+
+        XCTAssertFalse(SYSAssetsError.server(status: 404).isRetryable)
+        XCTAssertFalse(SYSAssetsError.server(status: 403).isRetryable)
+        XCTAssertFalse(SYSAssetsError.corrupt(pack: "a").isRetryable)
+        XCTAssertFalse(SYSAssetsError.unsupportedManifest(version: 2).isRetryable)
+        XCTAssertFalse(SYSAssetsError.notConfigured.isRetryable)
+    }
+
+    func testOnlyAStaleBuildAsksForAnUpdate() {
+        XCTAssertTrue(SYSAssetsError.unsupportedManifest(version: 9).requiresAppUpdate)
+        XCTAssertFalse(SYSAssetsError.offline.requiresAppUpdate)
+        XCTAssertFalse(SYSAssetsError.corrupt(pack: "a").requiresAppUpdate)
+    }
+
+    func testRetryableAndUpdateAreMutuallyExclusive() {
+        // A screen shows one or the other; an error that claims both would render
+        // a retry button next to "please update".
+        let all: [SYSAssetsError] = [
+            .offline, .server(status: 500), .server(status: 404),
+            .corrupt(pack: "a"), .unreadableManifest("x"),
+            .unsupportedManifest(version: 2), .missingRequiredPack(id: "a"), .notConfigured,
+        ]
+        for error in all {
+            XCTAssertFalse(error.isRetryable && error.requiresAppUpdate, "\(error)")
+        }
+    }
+
+    func testCachedPacksIsEmptyWithoutAManifest() async {
+        let assets = SYSAssets()
+        let cached = await assets.cachedPacks()
+        XCTAssertTrue(cached.isEmpty)
+    }
+}
+
+// MARK: - Typed pack and config access
+
+private struct TestPack: Decodable, Equatable, Sendable {
+    let id: String
+    let items: [String]
+}
+
+private struct TestAppConfig: Decodable, Equatable {
+    let maxPages: Int
+    let seasonal: Bool
+    let nested: Nested
+    struct Nested: Decodable, Equatable { let name: String; let sizes: [Int] }
+}
+
+final class SYSTypedAccessTests: XCTestCase {
+    private func decode(_ json: String) throws -> SYSConfigData {
+        try JSONDecoder().decode(SYSConfigData.self, from: Data(json.utf8))
+    }
+
+    func testStoreStartsEmptyAndForgetsCleanly() async {
+        let store = SYSAssetStore<TestPack>()
+        let empty = await store.all()
+        XCTAssertTrue(empty.isEmpty)
+
+        let loaded = await store.loaded("a")
+        XCTAssertNil(loaded)
+
+        let isLoaded = await store.isLoaded("a")
+        XCTAssertFalse(isLoaded)
+
+        await store.forgetAll()
+        let count = await store.count
+        XCTAssertEqual(count, 0)
+    }
+
+    func testStoreFailsClosedWhenAssetsAreUnconfigured() async {
+        // An app must not get a half-built store back; it has to see the failure.
+        let store = SYSAssetStore<TestPack>(assets: SYSAssets())
+        let result = await store.pack("a")
+        guard case let .failure(error) = result else { return XCTFail("expected failure") }
+        XCTAssertEqual(error, .notConfigured)
+    }
+
+    func testDecodeFailureIsNotRetryable() {
+        // The bytes are what the server published — asking again returns them
+        // again, so a retry button here would lie.
+        XCTAssertFalse(SYSAssetsError.decoding("x").isRetryable)
+        XCTAssertFalse(SYSAssetsError.decoding("x").requiresAppUpdate)
+    }
+
+    func testAppConfigDecodesIntoTheAppsOwnType() throws {
+        // Nested objects and arrays must survive the SYSValue round-trip; if they
+        // did not, apps would silently fall back to defaults for half their
+        // settings and nothing would say why.
+        let config = try decode("""
+        {"configVersion":1,"app":{"maxPages":12,"seasonal":true,
+         "nested":{"name":"winter","sizes":[1,2,3]}}}
+        """)
+        XCTAssertEqual(config.app(as: TestAppConfig.self), TestAppConfig(
+            maxPages: 12, seasonal: true,
+            nested: .init(name: "winter", sizes: [1, 2, 3])
+        ))
+    }
+
+    func testAppConfigReturnsNilRatherThanFailingOnMismatch() throws {
+        let config = try decode(#"{"configVersion":1,"app":{"maxPages":"not a number"}}"#)
+        XCTAssertNil(config.app(as: TestAppConfig.self))
+    }
+
+    func testAppConfigIsNilWhenSectionAbsent() throws {
+        let config = try decode(#"{"configVersion":1}"#)
+        XCTAssertNil(config.app(as: TestAppConfig.self))
+    }
+}
