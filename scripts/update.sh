@@ -151,7 +151,9 @@ for rel in "${MANAGED_DIRS[@]}"; do
 
   if [[ ! -d "$TARGET/$rel" ]]; then
     echo "  ADD     $rel/"; missing=$((missing+1))
-  elif ! diff -rq "$src" "$TARGET/$rel" >/dev/null 2>&1; then
+  # Same exclusions as the copy below: local build artefacts in either tree are
+  # not drift, and comparing them reports a difference that applying cannot fix.
+  elif ! diff -rq --exclude '.build' --exclude '.swiftpm' "$src" "$TARGET/$rel" >/dev/null 2>&1; then
     echo "  UPDATE  $rel/"; changed=$((changed+1))
   fi
 
