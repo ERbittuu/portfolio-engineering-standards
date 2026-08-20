@@ -380,7 +380,13 @@ than taste.
 | Check | Why |
 |---|---|
 | branch name | `release.yml` takes the tag straight from the branch name, so `release/v2.9.0` or `release/2.9` produce a wrong tag or none. Everything else is convention |
-| SYSKit tests | shared by every app, runs in about a second, needs no simulator |
+
+SYSKit's tests are not run here. It is vendored unchanged and tested at source in
+this repo's CI, so running them per app buys nothing — the same reason there is
+no `syskit-tests` job in `pr.yml`. They also cannot run reliably from a hook: a
+hook does not inherit the shell's toolchain selection, so `swift` picks the
+Command Line Tools SDK while compiling with Xcode's, and the mismatch fails the
+manifest with an error that reads like broken code.
 
 Both are escapable with `--no-verify`. A hook you cannot bypass gets uninstalled
 the first time it is wrong; one you can bypass gets kept.

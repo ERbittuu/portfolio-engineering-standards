@@ -1,5 +1,16 @@
 # Changelog
 
+## [1.10.2] - 2026-08-20
+
+### Removed
+- The SYSKit test step from the app `pre-push` hook. It is vendored unchanged and
+  tested at source in this repo's CI, so running it per app bought nothing — the
+  same reasoning that removed the `syskit-tests` job from `pr.yml` in 1.9.2. It
+  also could not run reliably from a hook: `DEVELOPER_DIR` fixes the toolchain but
+  not the SDK, so `swift` still compiled against the Command Line Tools SDK and
+  failed the manifest with an error that reads like broken code. A hook that
+  blocks pushes for reasons unrelated to the change is a hook that gets bypassed.
+
 ## [1.10.1] - 2026-08-20
 
 ### Fixed

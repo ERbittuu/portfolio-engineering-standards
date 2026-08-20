@@ -29,23 +29,12 @@ case "$branch" in
     ;;
 esac
 
-# 2. SYSKit tests. Shared by every app, so a break here lands in all of them.
-#    Runs in about a second and needs no simulator, so there is no reason to
-#    find out from CI instead.
-if [ -d App/Packages/SYSKit ] && command -v swift >/dev/null 2>&1; then
-  if ! git diff --quiet origin/main...HEAD -- App/Packages/SYSKit 2>/dev/null; then
-    echo "  · running SYSKit tests…" >&2
-    # DEVELOPER_DIR is pinned because a git hook does not inherit the shell's
-    # toolchain selection: swift resolves against the Command Line Tools SDK
-    # while compiling with Xcode's, and the version mismatch fails the manifest
-    # with an error that looks like broken code but is only a broken SDK pick.
-    if ! (cd App/Packages/SYSKit && DEVELOPER_DIR="$(xcode-select -p)" swift test >/dev/null 2>&1); then
-      echo "  ✗ SYSKit tests failed" >&2
-      echo "    reproduce: (cd App/Packages/SYSKit && swift test)" >&2
-      fail=1
-    fi
-  fi
-fi
+# SYSKit is deliberately not tested here. It is vendored unchanged and tested at
+# source in the standards repo's CI, so running it again per app buys nothing —
+# the same reason it is not a job in pr.yml. It also cannot be run reliably from
+# a hook: swift picks the Command Line Tools SDK there while compiling with
+# Xcode's toolchain, and the version mismatch fails the manifest with an error
+# that reads like broken code.
 
 [ "$fail" -eq 0 ] || echo "  push blocked — fix the above, or bypass with --no-verify" >&2
 exit "$fail"
