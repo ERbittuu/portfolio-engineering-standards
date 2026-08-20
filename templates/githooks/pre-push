@@ -35,8 +35,13 @@ esac
 if [ -d App/Packages/SYSKit ] && command -v swift >/dev/null 2>&1; then
   if ! git diff --quiet origin/main...HEAD -- App/Packages/SYSKit 2>/dev/null; then
     echo "  · running SYSKit tests…" >&2
-    if ! (cd App/Packages/SYSKit && swift test >/dev/null 2>&1); then
+    # DEVELOPER_DIR is pinned because a git hook does not inherit the shell's
+    # toolchain selection: swift resolves against the Command Line Tools SDK
+    # while compiling with Xcode's, and the version mismatch fails the manifest
+    # with an error that looks like broken code but is only a broken SDK pick.
+    if ! (cd App/Packages/SYSKit && DEVELOPER_DIR="$(xcode-select -p)" swift test >/dev/null 2>&1); then
       echo "  ✗ SYSKit tests failed" >&2
+      echo "    reproduce: (cd App/Packages/SYSKit && swift test)" >&2
       fail=1
     fi
   fi

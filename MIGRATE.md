@@ -166,6 +166,7 @@ deliver can no-op silently (see gotchas).
 
 | Symptom | Cause / fix |
 |---|---|
+| `swift test` fails only inside a git hook, passes in the shell | A hook does not inherit the shell's toolchain selection, so `swift` picks the Command Line Tools SDK while compiling with Xcode's — the error reads `this SDK is not supported by the compiler`, which looks like broken code and is a broken SDK pick. Pin `DEVELOPER_DIR="$(xcode-select -p)"`, as the template pre-push hook does |
 | Xcode Cloud "Failed to create workflow" | GitHub App has no access to the repo (org owner must add it), or a stale `xcodecloud/manifest.json` in the project — delete it and restart Xcode |
 | Onboarding wizard stuck on a dependency repo | You still have remote packages. Make them local (step 2). Also add a GitHub account in Xcode Settings → Accounts |
 | `agvtool: There are no Xcode project files` in CI | Xcode Cloud starts scripts inside `ci_scripts/` — cd to the project folder first |

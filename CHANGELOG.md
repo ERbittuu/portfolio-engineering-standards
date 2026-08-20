@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.10.1] - 2026-08-20
+
+### Fixed
+- `pre-push` pins `DEVELOPER_DIR`. A git hook does not inherit the shell's
+  toolchain selection, so `swift test` resolved against the Command Line Tools
+  SDK while compiling with Xcode's — the SDK and compiler versions disagreed and
+  the manifest failed to build. It only ever failed during an actual push and
+  passed every time it was run by hand, which made it look like a flake. Added to
+  the gotcha table.
+
 ## [1.10.0] - 2026-08-20
 
 ### Added
