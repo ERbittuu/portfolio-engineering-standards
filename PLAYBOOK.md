@@ -326,6 +326,35 @@ double-digit minor.
 and refuses a `minimumVersion` above the version live on the App Store — that
 combination blocks 100% of users with no version available to update to.
 
+### Changing SYSKit
+
+SYSKit is developed **inside a real app**, not here. Xcode builds it, the
+simulator runs it, and Firebase and SwiftUI are actually present — editing it in
+PES means a release and a pull for every experiment, which is slow enough that it
+stops happening and the shared layer stops improving.
+
+So changes flow **up** from the app that proved them, then **out** to every other
+app:
+
+```sh
+# in the app: edit App/Packages/SYSKit, build, run, get it right
+scripts/promote.sh ../Colorful             # review what would move
+scripts/promote.sh ../Colorful --apply     # copy it in, run the tests
+# bump VERSION + CHANGELOG, tag, then update.sh the other apps
+```
+
+`--apply` runs `swift test` against the promoted copy, because a package that
+only builds inside an app is not a shared package — PES's copy has to stand alone
+with no Xcode, no simulator and no Firebase, or the next app to vendor it
+inherits a broken build.
+
+`update.sh` **refuses** to overwrite a vendored package the app has modified. It
+replaces those directories wholesale (`rm -rf` then copy), so without that guard,
+taking any unrelated PES update would silently destroy work that had not been
+promoted yet. It tells the difference using `.pes-sync`, a fingerprint of what was
+last synced, written into the app's copy — commit it, or a fresh clone loses the
+ability to distinguish "PES moved on" from "the app changed this".
+
 ### Hosted content
 
 An app that ships its content separately from its binary — artwork, levels,

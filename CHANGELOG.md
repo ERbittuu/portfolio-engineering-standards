@@ -3,6 +3,17 @@
 ## [1.12.0] - 2026-08-20
 
 ### Added
+- **`scripts/promote.sh`** — copies an app's vendored SYS packages back into PES,
+  so SYSKit can be developed inside a real app and promoted once it works. Editing
+  it here meant a release and a pull per experiment, which is slow enough that the
+  shared layer stops improving. `--apply` runs `swift test` against the promoted
+  copy: a package that only builds inside an app is not a shared package.
+- `update.sh` refuses to overwrite a vendored package the app has modified. It
+  replaces those directories with `rm -rf` then copy, so before this, taking any
+  unrelated PES update silently destroyed un-promoted work. A `.pes-sync`
+  fingerprint written at sync time distinguishes "PES moved on" from "the app
+  changed this"; only the second is dangerous.
+
 - **`SYSAssets`** — the download, verify and cache layer for apps that ship
   content separately from the binary. Fetches the site's `manifest.json`,
   downloads the packs the app cannot start without, checks each against the
