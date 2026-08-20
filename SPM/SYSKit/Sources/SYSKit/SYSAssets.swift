@@ -74,10 +74,17 @@ public struct SYSAssetProgress: Equatable, Sendable {
 
 /// Downloads and caches the content an app ships separately from its binary.
 ///
-/// Apps that keep artwork out of the bundle need the same four things every time:
+/// Apps that keep content out of the bundle need the same four things every time:
 /// fetch an index, download what is required before the first screen, verify it,
 /// and keep it for next launch. Doing that once here means an app writes screens,
 /// not a download manager.
+///
+/// A pack is opaque here — bytes with an id and a hash. What is inside is the
+/// app's business and differs per app: colouring artwork in one, lesson data or
+/// audio in the next. This layer never decodes it, which is why the same code
+/// serves all of them. `Data/build.py` produces the packs and is app-specific by
+/// design (SEEDED, not MANAGED); `ensure` hands back `Data` and the app decides
+/// what it means.
 ///
 /// Like the rest of SYSKit this renders nothing. `prepareRequired` returns a
 /// result; the app decides whether that becomes a spinner, an error screen, or a
