@@ -27,6 +27,14 @@ MANAGED_DIRS=(
   "App/Packages/SYSFirebase"
 )
 
+# App-owned files that PES only *seeds*. Added when absent, never overwritten:
+# the app fills these in and they diverge on purpose. Without this, an existing
+# app adopting SYSKit gets the code and none of the data it reads.
+SEEDED=(
+  "App/Resources/config.json|app/config.json"
+  "App/Source/Shared/AnalyticsManager.swift|app/AnalyticsManager.swift"
+)
+
 # Files PES owns. Anything not listed here belongs to the app.
 MANAGED=(
   ".github/workflows/pr.yml"
@@ -119,6 +127,19 @@ for rel in "${MANAGED[@]}"; do
     mkdir -p "$TARGET/$(dirname "$rel")"
     render "$src" > "$TARGET/$rel"
     [[ "$rel" == *.sh ]] && chmod +x "$TARGET/$rel"
+  fi
+done
+
+# Seed anything the app is missing, then leave it alone forever after.
+for entry in "${SEEDED[@]}"; do
+  rel="${entry%%|*}"; src="${entry##*|}"
+  [[ -f "$PES_ROOT/templates/$src" ]] || continue
+  [[ -f "$TARGET/$rel" ]] && continue
+
+  echo "  SEED    $rel"; missing=$((missing+1))
+  if [[ $CHECK -eq 0 ]]; then
+    mkdir -p "$TARGET/$(dirname "$rel")"
+    render "$src" > "$TARGET/$rel"
   fi
 done
 
