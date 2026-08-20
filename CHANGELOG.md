@@ -1,5 +1,20 @@
 # Changelog
 
+## [1.14.0] - 2026-08-20
+
+### Added
+- Tests for `SYSStored` and `SYSHosting` (43 -> 53). Both pin a failure that is
+  silent rather than loud.
+
+  `SYSStored`: a stored `false` must not read as a missing key, and a value an
+  older build wrote natively must still be readable. Either mistake wipes every
+  existing install's settings on upgrade — which nobody files as a bug, they just
+  find the app annoying.
+
+  `SYSHosting`: with no `GoogleService-Info.plist` and no override, every lookup
+  returns nil rather than guessing a site. Guessing is what would let an app
+  resolve quietly against another project's content.
+
 ## [1.13.0] - 2026-08-20
 
 Developed inside Colorful and promoted with `promote.sh`, which is the direction

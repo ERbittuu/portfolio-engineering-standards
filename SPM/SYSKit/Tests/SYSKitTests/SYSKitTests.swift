@@ -415,3 +415,104 @@ final class SYSTypedAccessTests: XCTestCase {
         XCTAssertNil(config.app(as: TestAppConfig.self))
     }
 }
+
+// MARK: - SYSStored
+
+private let storedSuite = UserDefaults(suiteName: "sysstored.tests")!
+
+private final class TestPrefs: ObservableObject {
+    @SYSStored("music", default: true, defaults: storedSuite) var music: Bool
+    @SYSStored("count", default: 3, defaults: storedSuite) var count: Int
+    @SYSStored("name", default: "unset", defaults: storedSuite) var name: String
+}
+
+final class SYSStoredTests: XCTestCase {
+    private var prefs: TestPrefs!
+
+    override func setUp() {
+        super.setUp()
+        for key in ["music", "count", "name"] { storedSuite.removeObject(forKey: key) }
+        prefs = TestPrefs()
+    }
+
+    func testDefaultAppliesWhenTheKeyIsAbsent() {
+        XCTAssertTrue(prefs.music)
+        XCTAssertEqual(prefs.count, 3)
+        XCTAssertEqual(prefs.name, "unset")
+    }
+
+    func testStoredFalseIsAValueNotAMissingKey() {
+        // The bug defaults.bool(forKey:) invites: false and "absent" are the same
+        // there, so a user who switched something off gets it switched back on.
+        prefs.music = false
+        XCTAssertFalse(prefs.music)
+    }
+
+    func testWritesPersistToTheUnderlyingDefaults() {
+        prefs.count = 11
+        XCTAssertEqual(storedSuite.object(forKey: "count") as? Int, 11)
+    }
+
+    func testReadsAValueWrittenNativelyByAnOlderBuild() {
+        // Preferences inherited from the Objective-C app are plain plist values.
+        // Encoding them any other way would read as "no value" on every existing
+        // install and silently reset everyone's settings on upgrade.
+        storedSuite.set(false, forKey: "music")
+        storedSuite.set("Utsav", forKey: "name")
+        XCTAssertFalse(prefs.music)
+        XCTAssertEqual(prefs.name, "Utsav")
+    }
+
+    func testTwoInstancesSeeTheSameStoredValue() {
+        prefs.count = 7
+        XCTAssertEqual(TestPrefs().count, 7)
+    }
+}
+
+// MARK: - SYSHosting
+
+final class SYSHostingTests: XCTestCase {
+    /// The test bundle ships no GoogleService-Info.plist, which is exactly the
+    /// "app forgot to add it" case.
+    static let emptyBundle = Bundle(for: SYSHostingTests.self)
+
+    override func setUp() {
+        super.setUp()
+        SYSHosting.resetForTesting()
+    }
+
+    override func tearDown() {
+        SYSHosting.resetForTesting()
+        super.tearDown()
+    }
+
+    func testExplicitSiteURLWins() {
+        SYSHosting.setSiteURL(URL(string: "https://staging.example.com")!)
+        XCTAssertEqual(SYSHosting.siteURL()?.absoluteString, "https://staging.example.com")
+    }
+
+    func testConfigURLHangsOffTheSite() {
+        SYSHosting.setSiteURL(URL(string: "https://myapp.web.app")!)
+        XCTAssertEqual(SYSHosting.configURL()?.absoluteString, "https://myapp.web.app/config.json")
+    }
+
+    func testNoProjectAndNoOverrideMeansNoURL() {
+        // The test bundle ships no GoogleService-Info.plist. Returning nil rather
+        // than guessing is what stops an app silently resolving against some
+        // other project's site.
+        XCTAssertNil(SYSHosting.projectID(bundle: Self.emptyBundle))
+        XCTAssertNil(SYSHosting.siteURL(bundle: Self.emptyBundle))
+        XCTAssertNil(SYSHosting.configURL(bundle: Self.emptyBundle))
+    }
+
+    func testOverrideSurvivesAMissingPlist() {
+        SYSHosting.setSiteURL(URL(string: "https://custom.domain")!)
+        XCTAssertEqual(SYSHosting.siteURL(bundle: Self.emptyBundle)?.absoluteString, "https://custom.domain")
+    }
+
+    func testResetClearsTheOverride() {
+        SYSHosting.setSiteURL(URL(string: "https://custom.domain")!)
+        SYSHosting.resetForTesting()
+        XCTAssertNil(SYSHosting.siteURL(bundle: Self.emptyBundle))
+    }
+}
