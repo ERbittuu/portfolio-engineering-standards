@@ -1,5 +1,37 @@
 # Changelog
 
+## [1.11.0] - 2026-08-20
+
+### Changed
+- **`deploy-config` and `deploy-data` are now one job, `deploy-hosting`.** They
+  deployed to the same Hosting site while each staged only its own half of it,
+  and a Hosting deploy atomically replaces the WHOLE site — files absent from
+  the staged directory are deleted from the live one. So whichever job ran last
+  silently removed the other's files. Confirmed on a preview channel: staging
+  config.json and manifest.json together served both at 200; re-staging
+  config.json alone left manifest.json at 404. The bug was latent only because
+  no app had shipped hosted data yet — the first one to do so would have lost
+  its entire content library on the next config change.
+
+  One site is one deploy unit. `Data/build.py` now stages the complete site,
+  config.json included, and `deploy-hosting` runs whenever config **or** data
+  changes. The `workflow_dispatch` choices become `all | metadata | screenshots
+  | hosting`, and the `changes` job emits one `hosting` output in place of
+  `config` and `data`.
+
+### Added
+- `Data/build.py` is SEEDED into every app. The deploy job runs it on any config
+  change, so an app without one would fail — and every app has config. The
+  template stages config.json and leaves a marked place for app-specific data;
+  `manifest.json` is optional and CI skips the data checks when it is absent.
+- The smoke test now fetches **every** bundle the manifest names, not just the
+  first. A manifest pointing at a missing pack is precisely what a partial
+  deploy leaves behind, and the app cannot recover from it.
+- `firebase.json` marks `/packs/**` immutable and caps `manifest.json` at 300s.
+  Content-addressed payload names make immutable caching safe: a URL's bytes
+  never change, new content gets a new name, and old installs keep resolving the
+  URL they already know until they refresh the index.
+
 ## [1.10.5] - 2026-08-20
 
 ### Fixed

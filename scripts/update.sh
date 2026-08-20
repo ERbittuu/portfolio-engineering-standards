@@ -35,6 +35,7 @@ SEEDED=(
   "App/Source/Shared/AnalyticsManager.swift|app/AnalyticsManager.swift"
   "firebase.json|app/firebase.json"
   "scripts/ci/validate_screenshots.py|scripts/ci/validate_screenshots.py"
+  "Data/build.py|app/build.py"
 )
 
 # Files PES owns. Anything not listed here belongs to the app.

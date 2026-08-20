@@ -34,7 +34,7 @@ on:
         description: "Which job to run"
         type: choice
         default: all
-        options: [all, metadata, screenshots, data, config]
+        options: [all, metadata, screenshots, hosting]
 
 permissions:
   contents: read
@@ -54,9 +54,8 @@ jobs:
     timeout-minutes: 5
     outputs:
       metadata: ${{ steps.decide.outputs.metadata }}
-      config: ${{ steps.decide.outputs.config }}
       screenshots: ${{ steps.decide.outputs.screenshots }}
-      data: ${{ steps.decide.outputs.data }}
+      hosting: ${{ steps.decide.outputs.hosting }}
     steps:
       - uses: actions/checkout@v7
 
@@ -82,7 +81,7 @@ jobs:
         run: |
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             WANT="${{ inputs.job }}"
-            for j in metadata screenshots data config; do
+            for j in metadata screenshots hosting; do
               if [ "$WANT" = "all" ] || [ "$WANT" = "$j" ]; then
                 echo "$j=true" >> "$GITHUB_OUTPUT"
               else
@@ -93,13 +92,17 @@ jobs:
             # Release branch: always sync the listing, never deploy content.
             echo "metadata=true" >> "$GITHUB_OUTPUT"
             echo "screenshots=true" >> "$GITHUB_OUTPUT"
-            echo "data=false" >> "$GITHUB_OUTPUT"
-            echo "config=false" >> "$GITHUB_OUTPUT"
+            echo "hosting=false" >> "$GITHUB_OUTPUT"
           else
             echo "metadata=${{ steps.filter.outputs.metadata }}" >> "$GITHUB_OUTPUT"
             echo "screenshots=${{ steps.filter.outputs.screenshots }}" >> "$GITHUB_OUTPUT"
-            echo "data=${{ steps.filter.outputs.data }}" >> "$GITHUB_OUTPUT"
-            echo "config=${{ steps.filter.outputs.config }}" >> "$GITHUB_OUTPUT"
+            # Config and data share one site and one atomic deploy, so either
+            # one changing restages and republishes the whole site.
+            if [ "${{ steps.filter.outputs.config }}" = "true" ] || [ "${{ steps.filter.outputs.data }}" = "true" ]; then
+              echo "hosting=true" >> "$GITHUB_OUTPUT"
+            else
+              echo "hosting=false" >> "$GITHUB_OUTPUT"
+            fi
           fi
 
   # Push App Store metadata (TEXT ONLY) to App Store Connect.
@@ -156,23 +159,56 @@ jobs:
   # served copies cannot drift. main only: config takes effect on the next
   # launch for flags, but the maintenance and force-update gates read it during
   # startup, so it must not go live ahead of the build it describes.
-  deploy-config:
+  # ONE Hosting site means ONE deploy. A Hosting deploy atomically replaces the
+  # whole site: any file absent from the staged directory is DELETED from the
+  # live site. Two jobs each staging their own half — one config.json, one the
+  # data bundles — means whichever deploys last silently removes the other's
+  # files. Verified on a preview channel: staging both gave config.json 200 and
+  # manifest.json 200; re-staging config.json alone left manifest.json at 404.
+  #
+  # So config and data deploy together, from a single staging step that emits
+  # the complete site. Splitting them again reintroduces the bug.
+  #
+  # {{ Data/build.py must stage EVERYTHING the site serves, config.json
+  #    included. An app with no hosted data still needs it — see the template
+  #    in this repo. Secret: FIREBASE_SERVICE_ACCOUNT (Hosting Admin only).
+  #    Rollback: `firebase hosting:rollback`. }}
+  deploy-hosting:
     needs: changes
     if: |
-      needs.changes.outputs.config == 'true' &&
+      needs.changes.outputs.hosting == 'true' &&
       (github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch')
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     concurrency:
-      group: deploy-config
-      cancel-in-progress: false
+      group: deploy-hosting
+      cancel-in-progress: false   # never cancel a deploy midway
     steps:
       - uses: actions/checkout@v7
 
-      - name: Stage config for Hosting
+      - name: Stage the complete site
+        run: cd Data && python3 build.py --clean
+
+      - name: Verify the staged site is complete
         run: |
-          mkdir -p _hosting
-          cp App/Resources/config.json _hosting/config.json
+          # Deploying a half-built site deletes whatever is missing. Catch that
+          # here, where it costs nothing, rather than on the live site.
+          [ -f _hosting/config.json ] || {
+            echo "::error::_hosting/config.json missing — Data/build.py must stage the whole site, config included"
+            exit 1
+          }
+          python3 -c "import json;json.load(open('_hosting/config.json'))" || {
+            echo "::error::staged config.json is not valid JSON"; exit 1; }
+
+          # manifest.json is optional: an app may host config and nothing else.
+          if [ -f _hosting/manifest.json ]; then
+            python3 -c "import json;json.load(open('_hosting/manifest.json'))" || {
+              echo "::error::staged manifest.json is not valid JSON"; exit 1; }
+            echo "manifest staged"
+          else
+            echo "no manifest.json staged — this app hosts config only"
+          fi
+          echo "Staged $(find _hosting -type f | wc -l) file(s)"
 
       - uses: FirebaseExtended/action-hosting-deploy@v0
         with:
@@ -181,20 +217,15 @@ jobs:
           projectId: "{{FIREBASE_PROJECT_ID}}"
           channelId: live
 
-      # A green deploy is not proof the file is being served — deliver has
-      # taught that lesson already elsewhere in this system.
-      # Hosting reports a successful deploy before its CDN stops serving the
-      # previous copy — seconds, but reliably more than zero. Checked once and
-      # immediately, this step fails on a deploy that worked, which is how a
-      # check becomes something people re-run instead of read.
-      - name: Smoke test — served config matches what we shipped
+      # A green deploy is not proof the file is being served. Hosting also
+      # reports success before its CDN stops serving the previous copy, so
+      # both checks retry against a cache-busted URL.
+      - name: Smoke test — the live site serves what we shipped
         run: |
           BASE="https://{{FIREBASE_PROJECT_ID}}.web.app"
           LOCAL=$(python3 -c "import json;print(json.load(open('App/Resources/config.json'))['configVersion'])")
 
           for attempt in $(seq 1 10); do
-            # Cache-buster: without it the edge can keep answering from cache
-            # for the whole retry window and the wait buys nothing.
             SERVED=$(curl -sSf -H 'Cache-Control: no-cache' \
                        "$BASE/config.json?ci=${GITHUB_RUN_ID:-0}-$attempt" || true)
             REMOTE=$(printf '%s' "$SERVED" \
@@ -203,49 +234,15 @@ jobs:
             echo "attempt $attempt: serving ${REMOTE:-<no valid JSON>}, want $LOCAL — waiting"
             sleep 6
           done
-
-          printf '%s' "$SERVED" | python3 -c "import json,sys; json.load(sys.stdin)" || {
-            echo "::error::served config.json is not valid JSON"; exit 1; }
           [ "$LOCAL" = "$REMOTE" ] || {
             echo "::error::served configVersion $REMOTE does not match shipped $LOCAL after 60s"; exit 1; }
           echo "Serving configVersion $REMOTE"
 
-  # {{ OPTIONAL — delete this job if the app ships no remote content.
-  #    Deploys to Firebase Hosting. Secret: FIREBASE_SERVICE_ACCOUNT
-  #    (Hosting Admin role only). Rollback: `firebase hosting:rollback`. }}
-  deploy-data:
-    needs: changes
-    if: |
-      needs.changes.outputs.data == 'true' &&
-      (github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch')
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    concurrency:
-      group: deploy-data
-      cancel-in-progress: false   # never cancel a deploy midway
-    steps:
-      - uses: actions/checkout@v7
+          if [ ! -f _hosting/manifest.json ]; then
+            echo "Smoke test passed: configVersion $REMOTE (no hosted data for this app)"
+            exit 0
+          fi
 
-      - name: Build data bundles
-        run: cd Data && python3 build.py --clean
-
-      - name: Deploy to Firebase Hosting
-        uses: FirebaseExtended/action-hosting-deploy@v0
-        with:
-          repoToken: ${{ github.token }}
-          firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
-          projectId: "{{FIREBASE_PROJECT_ID}}"
-          channelId: live
-
-      # Every app install hits this immediately after deploy — catches the
-      # "file exists in the repo but Hosting isn't actually serving it"
-      # class of bug before real users do, given the blast radius here.
-      # Adjust the manifest path and the JSON key for your own index file.
-      # Same propagation window as deploy-config: the deploy is reported done
-      # before the edge stops serving the previous manifest.
-      - name: Smoke test — live manifest and one item bundle are reachable
-        run: |
-          BASE="https://{{FIREBASE_PROJECT_ID}}.web.app"
           for attempt in $(seq 1 10); do
             MANIFEST=$(curl -sSf -H 'Cache-Control: no-cache' \
                          "$BASE/manifest.json?ci=${GITHUB_RUN_ID:-0}-$attempt" || true)
@@ -253,22 +250,17 @@ jobs:
             echo "attempt $attempt: manifest not readable yet — waiting"
             sleep 6
           done
-
           printf '%s' "$MANIFEST" | python3 -c "import json,sys; json.load(sys.stdin)" || {
-            echo "::error::manifest.json at $BASE is not valid JSON after 60s"
-            exit 1
-          }
+            echo "::error::manifest.json at $BASE is not valid JSON after 60s"; exit 1; }
 
-          BUNDLE_PATH=$(echo "$MANIFEST" | python3 -c "import json,sys; print(json.load(sys.stdin)['items'][0]['bundle'])")
-          BUNDLE_PATH="${BUNDLE_PATH#/}"
-          for attempt in $(seq 1 10); do
-            curl -sSfI "$BASE/$BUNDLE_PATH" > /dev/null 2>&1 && break
-            echo "attempt $attempt: $BUNDLE_PATH not reachable yet — waiting"
-            sleep 6
-          done
-          curl -sSfI "$BASE/$BUNDLE_PATH" > /dev/null || {
-            echo "::error::sample item bundle $BASE/$BUNDLE_PATH is not reachable after 60s"
-            exit 1
-          }
+          # Every bundle the manifest names must actually be served. A manifest
+          # pointing at a missing pack is exactly what a partial deploy leaves
+          # behind, and the app cannot recover from it.
+          echo "$MANIFEST" | python3 -c "import json,sys;[print(i['bundle']) for i in json.load(sys.stdin)['items']]" \
+            | while read -r BUNDLE; do
+                curl -sSfI "$BASE${BUNDLE}" > /dev/null || {
+                  echo "::error::manifest names $BUNDLE but it is not served"; exit 1; }
+              done
 
-          echo "Smoke test passed: manifest.json valid, sample bundle ($BUNDLE_PATH) reachable"
+          COUNT=$(echo "$MANIFEST" | python3 -c "import json,sys;print(len(json.load(sys.stdin)['items']))")
+          echo "Smoke test passed: configVersion $REMOTE, manifest valid, all $COUNT bundle(s) reachable"
