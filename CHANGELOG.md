@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.9.2] - 2026-08-20
+
+### Fixed
+- CI is green. The two fixes that got it there landed after 1.9.1 was tagged, so
+  they were in no release: `SYSNetwork` needed `FoundationNetworking` (Linux keeps
+  `URLSession` and `HTTPURLResponse` there rather than in `Foundation`), and the
+  tests moved to macOS once it was clear `URLSession`'s async API does not exist
+  in swift-corelibs-foundation at all.
+
 ## [1.9.1] - 2026-08-20
 
 ### Fixed
