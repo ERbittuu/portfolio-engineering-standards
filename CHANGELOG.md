@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.15.1] - 2026-08-20
+
+### Fixed
+- `dorny/paths-filter` v3 -> v4 across `pr.yml` and `main.yml`. v3 runs on Node 20,
+  which GitHub has deprecated and is force-running on Node 24 with a warning on
+  every job — a warning that will become a failure on GitHub's timetable, not
+  ours. The action's inputs are unchanged; only its runtime moved.
+
+  Fixed here rather than per app: these workflows are MANAGED, so a Dependabot PR
+  raised against an app is reverted by the next `update.sh`. Dependency bumps to
+  managed files belong upstream, and the app PRs can be closed once this lands.
+
 ## [1.15.0] - 2026-08-20
 
 ### Added
