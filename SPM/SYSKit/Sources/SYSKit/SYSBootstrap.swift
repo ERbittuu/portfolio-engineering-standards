@@ -46,7 +46,7 @@ public enum SYSBootstrap {
         config: SYSConfig = .shared,
         onboardingEnabled: Bool = true,
         requiresAssets: Bool = false,
-        assetProgress: (@Sendable (SYSAssetProgress) -> Void)? = nil
+        assetProgress: (@MainActor @Sendable (SYSAssetProgress) -> Void)? = nil
     ) async -> SYSAppState {
         // 1. Local config first — instant, always succeeds.
         config.load()
@@ -82,6 +82,10 @@ public enum SYSBootstrap {
                 SYSLogger.error("startup: required content unavailable — \(error)")
                 return .dataUnavailable(error)
             }
+            // Pack names carry a content hash, so a republished pack lands beside
+            // its predecessor. Left to each app to remember, this is the kind of
+            // housekeeping that is skipped until a device fills up.
+            await SYSAssets.shared.pruneStalePacks()
         }
 
         // 6. Onboarding before anything else the user could act on.
@@ -105,7 +109,7 @@ public enum SYSBootstrap {
     public static func retryAssets(
         config: SYSConfig = .shared,
         onboardingEnabled: Bool = true,
-        assetProgress: (@Sendable (SYSAssetProgress) -> Void)? = nil
+        assetProgress: (@MainActor @Sendable (SYSAssetProgress) -> Void)? = nil
     ) async -> SYSAppState {
         let prepared = await SYSAssets.shared.prepareRequired(progress: assetProgress)
         if case let .failure(error) = prepared { return .dataUnavailable(error) }

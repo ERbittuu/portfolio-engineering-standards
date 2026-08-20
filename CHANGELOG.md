@@ -1,5 +1,70 @@
 # Changelog
 
+## [1.13.0] - 2026-08-20
+
+Developed inside Colorful and promoted with `promote.sh`, which is the direction
+these changes are meant to flow from now on.
+
+### Added
+- **`SYSStartup` and `SYSBootstrappedApp`** — the launch state machine and the
+  scene wiring. An app declares its screens; holding the state, hopping progress
+  to the main actor, clearing it on retry and tracking the launch at the right
+  moment are no longer per-app code. Tracking before the gates counts a blocked
+  launch as a session; retrying without clearing progress leaves a stale bar.
+  Conforming also removes a failure with no symptom — forget the `.task` that
+  starts everything and the app sits on its loading screen forever with nothing
+  in the log to say why.
+- **`SYSHosting`** — config and pack URLs derived from `PROJECT_ID` in
+  `GoogleService-Info.plist`. That string was already shipping; repeating it in
+  Swift only created a way to point a release at another project's content.
+  Custom domains override with `setSiteURL`.
+- **Typed content**: `SYSAssets.ensure(_:as:)` and `cachedPacks(as:)` take the
+  app's own `Decodable` type and return values rather than `Data`, and
+  **`SYSAssetStore<Pack>`** keeps the decoded packs. Apps declare a type instead
+  of writing the decode-and-remember bookkeeping. A decode failure is its own
+  error and is not retryable: the bytes are what the server published.
+- **`SYSAssets` coalesces concurrent downloads** of the same pack, including
+  during `prepareRequired`, so a tap during startup joins the download already
+  running instead of starting a second.
+- **`SYSStored`** — a `UserDefaults`-backed preference that publishes. Replaces
+  four steps per setting; one real app went 33 lines to 14. Reads and writes keys
+  in their native form, so preferences inherited from an older build keep working
+  rather than silently resetting on upgrade, and the default applies only when the
+  key is absent — a stored `false` stays `false`.
+- **`SYSReview`** — presents the system prompt when `SYSRating` says it is due,
+  and records the ask itself. Apple ignores requests beyond three a year, so an
+  app that asks without recording spends all three on one user. With no foreground
+  scene it declines without recording, keeping the chance for later.
+- **`SYSConfigData.app(as:)`** — the app-specific config section decoded into a
+  type the app declares, so a mistyped key is a compile error rather than a silent
+  nil. On the data rather than the manager, so it is testable with no launch, no
+  disk and no network.
+- **`SYSHash`** — SHA-256 for integrity, CryptoKit where it exists and a
+  plain-Swift FIPS 180-4 transcription elsewhere, both tested against the
+  published vectors and each other.
+- **`SYSAssetGate`** — the loading/ready/failed/retry flow for content an app
+  downloads. All three states are the app's views; this owns only when each
+  appears.
+- **`SYSStateAction`** — whether a blocking screen offers a button, and which.
+  Wording and icons stay with the app; whether a retry is honest does not, since
+  re-tapping a 404 or a hash mismatch fetches the same failure.
+
+### Fixed
+- `SYSBootstrap` prunes superseded packs after a successful start. Pack names are
+  content-addressed, so a republished pack lands beside its predecessor; left to
+  each app to remember, this is the housekeeping that gets skipped until a device
+  fills up.
+- `SYSStartup.retry` guarded `isRunning` outside the `Task` that set it, so a
+  second tap landing between the two passed the guard and ran two retries.
+
+### Deliberately not added
+`SYSMetrics` and `SYSAudio` were both written and removed. A design baseline is
+not shared — a default landscape reference silently misscales every portrait app
+that forgets to override it. And audio appears in one of the other three apps, so
+it fails the rule this release settles on: **SYSKit holds the launch flow, the
+data path, and helpers every app needs.** Screens, copy, layout and design values
+stay with the app that owns them.
+
 ## [1.12.0] - 2026-08-20
 
 ### Added
