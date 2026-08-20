@@ -326,6 +326,74 @@ double-digit minor.
 and refuses a `minimumVersion` above the version live on the App Store — that
 combination blocks 100% of users with no version available to update to.
 
+### Changing SYSKit
+
+SYSKit is developed **inside a real app**, not here. Xcode builds it, the
+simulator runs it, and Firebase and SwiftUI are actually present — editing it in
+PES means a release and a pull for every experiment, which is slow enough that it
+stops happening and the shared layer stops improving.
+
+So changes flow **up** from the app that proved them, then **out** to every other
+app:
+
+```sh
+# in the app: edit App/Packages/SYSKit, build, run, get it right
+scripts/promote.sh ../Colorful             # review what would move
+scripts/promote.sh ../Colorful --apply     # copy it in, run the tests
+# bump VERSION + CHANGELOG, tag, then update.sh the other apps
+```
+
+`--apply` runs `swift test` against the promoted copy, because a package that
+only builds inside an app is not a shared package — PES's copy has to stand alone
+with no Xcode, no simulator and no Firebase, or the next app to vendor it
+inherits a broken build.
+
+`update.sh` **refuses** to overwrite a vendored package the app has modified. It
+replaces those directories wholesale (`rm -rf` then copy), so without that guard,
+taking any unrelated PES update would silently destroy work that had not been
+promoted yet. It tells the difference using `.pes-sync`, a fingerprint of what was
+last synced, written into the app's copy — commit it, or a fresh clone loses the
+ability to distinguish "PES moved on" from "the app changed this".
+
+### Hosted content
+
+An app that ships its content separately from its binary — artwork, levels,
+lessons — uses `SYSAssets`. The site serves a `manifest.json` naming every pack;
+`Data/build.py` produces it alongside `config.json` in one staging step, because
+a Hosting deploy replaces the whole site and a second job deploying "just its own
+files" deletes everything else.
+
+Pack filenames are **content-addressed** (`seaworld-3446a234.json`). New content
+gets a new filename, so an installed app keeps resolving the URL it already
+cached until it refreshes the manifest, and `/packs/**` can be marked immutable.
+Packs are JSON, not zip: iOS has no public unzip API and PES forbids remote
+packages, so a zip means hand-writing a zip reader — while Hosting gzips JSON on
+the wire for the same bytes. For one real app the JSON packs gzip *smaller* than
+the zips did, because gzip compresses across the whole pack.
+
+For apps whose content is **not** optional — nothing in the bundle to fall back
+on — pass `requiresAssets: true` to `SYSBootstrap.start`. Startup then fails
+closed with `.dataUnavailable(SYSAssetsError)` instead of reaching a home screen
+with nothing to draw, and the app shows its own error screen wired to
+`SYSBootstrap.retryAssets()`. The check runs *after* the maintenance and
+force-update gates: a device that cannot download is exactly the one that needs
+the real reason rather than a generic network error.
+
+Downloads verify the manifest's SHA-256 before a pack is accepted, and a hash
+mismatch is not retried — the server is wrong, not the connection. A 4xx is not
+retried either. Only genuine network failures are, three times with a short
+backoff, because the app's retry button is the real recovery path.
+
+| Concern | Handler |
+|---|---|
+| Pack index, download, cache, prune | `SYSAssets` |
+| Startup gating on required content | `SYSBootstrap` (`requiresAssets:`) |
+| Integrity | `SYSHash` |
+
+**Content that is remote-only makes first launch require a network.** That is a
+product decision, not a technical one — if the app claims to work offline, the
+claim has to change or a starter set has to ship in the bundle.
+
 ### Analytics
 
 The manager is shared; the vocabulary is not. Apps declare their own events

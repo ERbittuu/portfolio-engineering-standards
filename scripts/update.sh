@@ -147,15 +147,41 @@ for entry in "${SEEDED[@]}"; do
 done
 
 # SYSKit and its Firebase adapter: ours, so they are replaced wholesale.
+#
+# Except when the app has edited them. SYSKit is developed inside a real app —
+# Xcode builds it, the simulator runs it, Firebase is actually present — and
+# changes are promoted back with scripts/promote.sh. This loop deletes the
+# directory before copying, so without the guard below, taking any unrelated PES
+# update would silently destroy work that had not been promoted yet.
+#
+# A fingerprint of what was last synced lets us tell "PES moved on" from "the app
+# changed this". Only the second is dangerous.
 for rel in "${MANAGED_DIRS[@]}"; do
   src="$PES_ROOT/SPM/$(basename "$rel")"
   [[ -d "$src" ]] || continue
 
+  stamp="$TARGET/$rel/.pes-sync"
+  fingerprint_of() {
+    # Content hash of the tracked tree, artefacts excluded. Sorted so the result
+    # does not depend on directory traversal order.
+    find "$1" -type f \
+      ! -path '*/.build/*' ! -path '*/.swiftpm/*' ! -name '.pes-sync' \
+      -exec shasum -a 256 {} \; 2>/dev/null \
+      | awk '{print $1}' | sort | shasum -a 256 | awk '{print $1}'
+  }
+
   if [[ ! -d "$TARGET/$rel" ]]; then
     echo "  ADD     $rel/"; missing=$((missing+1))
-  # Same exclusions as the copy below: local build artefacts in either tree are
-  # not drift, and comparing them reports a difference that applying cannot fix.
-  elif ! diff -rq --exclude '.build' --exclude '.swiftpm' "$src" "$TARGET/$rel" >/dev/null 2>&1; then
+  elif ! diff -rq --exclude '.build' --exclude '.swiftpm' --exclude '.pes-sync' \
+         "$src" "$TARGET/$rel" >/dev/null 2>&1; then
+
+    if [[ -f "$stamp" ]] && [[ "$(fingerprint_of "$TARGET/$rel")" != "$(cat "$stamp")" ]]; then
+      echo "  ✗ $rel/ has local changes that are not in PES."
+      echo "    Overwriting would delete them. Promote them first:"
+      echo "      $PES_ROOT/scripts/promote.sh $TARGET --apply"
+      echo "    Or discard them:  rm -rf $TARGET/$rel  and re-run."
+      exit 1
+    fi
     echo "  UPDATE  $rel/"; changed=$((changed+1))
   fi
 
@@ -164,6 +190,7 @@ for rel in "${MANAGED_DIRS[@]}"; do
     rm -rf "$TARGET/$rel"
     # .build and .swiftpm are local artefacts, never vendored.
     rsync -a --exclude '.build' --exclude '.swiftpm' "$src/" "$TARGET/$rel/"
+    fingerprint_of "$TARGET/$rel" > "$stamp"
   fi
 done
 
