@@ -53,6 +53,11 @@ def stage_app_data() -> dict | None:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--clean", action="store_true", help="remove _hosting/ first")
+    # pr.yml's data-ci job runs this with --clean --verbose. Accepting the flag
+    # is part of the contract: argparse exits 2 on an unknown argument, so a
+    # build.py without it fails the PR check with "unrecognized arguments"
+    # rather than anything about the data.
+    parser.add_argument("--verbose", action="store_true", help="list every staged file")
     args = parser.parse_args()
 
     if not APP_CONFIG.is_file():
@@ -74,7 +79,11 @@ def main() -> int:
     # bundled and served copies cannot drift.
     shutil.copyfile(APP_CONFIG, STAGE / "config.json")
 
-    print(f"Site root: {STAGE} ({sum(1 for _ in STAGE.rglob('*') if _.is_file())} file(s))")
+    files = sorted(f for f in STAGE.rglob("*") if f.is_file())
+    if args.verbose:
+        for f in files:
+            print(f"  {f.relative_to(STAGE)}  {f.stat().st_size:,} B")
+    print(f"Site root: {STAGE} ({len(files)} file(s))")
     return 0
 
 
