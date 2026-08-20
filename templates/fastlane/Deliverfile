@@ -47,8 +47,21 @@ copyright "© {{YEAR}} {{OWNER_NAME}}"
 
 # ── Submission ────────────────────────────────────────────────────────────
 submit_for_review false   # submission stays a human step
-automatic_release false
-phased_release    true
+
+# automatic_release / phased_release are deliberately NOT set.
+#
+# deliver only sends releaseType when automatic_release is non-nil, and App
+# Store Connect rejects the ENTIRE metadata PATCH with
+#   "The attribute 'releaseType' can not be modified"
+# whenever the version has no build attached yet — the state every FIRST
+# release is in. It fails even when the value being sent matches what the
+# version already has, so this is not a mismatch you can configure around.
+#
+# phased_release is a harder no: Apple does not offer phased release for an
+# app's first version at all, only for updates.
+#
+# Set both in App Store Connect at submission time, or re-enable them here
+# once the app has shipped once and versions have builds attached.
 
 # ── Options ───────────────────────────────────────────────────────────────
 skip_binary_upload true    # Xcode Cloud owns the build

@@ -34,6 +34,7 @@ SEEDED=(
   "App/Resources/config.json|app/config.json"
   "App/Source/Shared/AnalyticsManager.swift|app/AnalyticsManager.swift"
   "firebase.json|app/firebase.json"
+  "scripts/ci/validate_screenshots.py|scripts/ci/validate_screenshots.py"
 )
 
 # Files PES owns. Anything not listed here belongs to the app.
@@ -49,9 +50,9 @@ MANAGED=(
   "App/ci_scripts/ci_post_clone.sh"
   "App/ci_scripts/ci_pre_xcodebuild.sh"
   "App/ci_scripts/ci_post_xcodebuild.sh"
-  "scripts/ci/validate_screenshots.py"
   "scripts/ci/validate_analytics_events.py"
   "scripts/ci/validate_config.py"
+  "scripts/ci/validate_urls.py"
   "App/Source/Shared/SYSConfig.swift"
   ".editorconfig"
   ".gitattributes"

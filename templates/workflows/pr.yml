@@ -155,6 +155,8 @@ jobs:
             metadata:
               - 'fastlane/metadata/**'
               - 'fastlane/Deliverfile'
+            config:
+              - 'App/Resources/config.json'
 
       - uses: ruby/setup-ruby@v1
         if: steps.changes.outputs.metadata == 'true'
@@ -164,6 +166,14 @@ jobs:
 
       - if: steps.changes.outputs.metadata == 'true'
         run: bundle exec fastlane validate_metadata
+
+      # Shape is not the failure mode — the scaffolded GitHub Pages URL is
+      # well-formed and 404s until someone publishes the page. Apple rejects a
+      # listing whose privacy URL is dead, and that rejection arrives at
+      # submission, long after every check here went green.
+      - name: Check the URLs we ship actually resolve
+        if: steps.changes.outputs.metadata == 'true' || steps.changes.outputs.config == 'true'
+        run: python3 scripts/ci/validate_urls.py
 
   # Exact pixel dimensions per device class, complete locale sets, no
   # corrupt files. See scripts/ci/validate_screenshots.py — update the

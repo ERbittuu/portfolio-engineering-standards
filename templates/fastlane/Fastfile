@@ -59,6 +59,35 @@ platform :ios do
     metadata_root = File.expand_path("metadata", __dir__)
     store_locales = ["en-US"]  # must match Deliverfile's languages()
 
+    # The store-locale list is declared in three files that have to agree, and
+    # nothing used to check that they did. Drift is silent and asymmetric: add
+    # a locale to Deliverfile alone and deliver activates a listing this lane
+    # never validates; add it here alone and a locale ships with no
+    # screenshots. Either way it surfaces as a store problem, not a CI failure.
+    deliverfile = File.expand_path("Deliverfile", __dir__)
+    if File.exist?(deliverfile)
+      declared = File.read(deliverfile)[/languages\s*\(\s*\[(.*?)\]/m, 1]
+      if declared
+        from_deliverfile = declared.scan(/"([^"]+)"|'([^']+)'/).flatten.compact
+        unless from_deliverfile.sort == store_locales.sort
+          UI.user_error!("Store locales disagree: Deliverfile says #{from_deliverfile.inspect}, " \
+                         "this lane says #{store_locales.inspect} — make them match")
+        end
+      end
+    end
+
+    screenshot_check = File.expand_path("../scripts/ci/validate_screenshots.py", __dir__)
+    if File.exist?(screenshot_check)
+      declared = File.read(screenshot_check)[/STORE_LOCALES\s*=\s*\{(.*?)\}/m, 1]
+      if declared
+        from_check = declared.scan(/"([^"]+)"|'([^']+)'/).flatten.compact
+        unless from_check.sort == store_locales.sort
+          UI.user_error!("Store locales disagree: validate_screenshots.py says #{from_check.inspect}, " \
+                         "this lane says #{store_locales.inspect} — make them match")
+        end
+      end
+    end
+
     char_limits = {
       "name"             => 30,
       "subtitle"         => 30,
@@ -102,9 +131,27 @@ platform :ios do
         errors << "#{locale}: '#{field}' is not a valid URL: #{value.inspect}" unless value =~ %r{\Ahttps?://\S+\z}
       end
 
+      # The scaffolded metadata file is valid JSON of the right shape, so
+      # nothing above objects to it — an app can ship "First paragraph of the
+      # store description." to the live listing and every check stays green.
+      # These are the exact strings templates/fastlane/metadata-locale.template.json
+      # seeds; if that template changes, change these with it.
+      placeholders = [
+        "First paragraph of the store description.",
+        "Second paragraph. Arrays join with newlines.",
+        "comma,separated,max,100,chars",
+        "Changeable anytime without a release (170 chars max).",
+        "What's new in this version.",
+        "NOTE: Apple rejects emoji in this field.",
+        "UPDATE THIS"
+      ]
+
       fields.each do |field, value|
         text = value.is_a?(Array) ? value.join("\n") : value.to_s
-        errors << "#{locale}: '#{field}' still has an UPDATE THIS placeholder" if text.include?("UPDATE THIS")
+        placeholders.each do |ph|
+          errors << "#{locale}: '#{field}' is still scaffold text (#{ph.inspect}) — write the real copy before it reaches the store" if text.include?(ph)
+        end
+        errors << "#{locale}: '#{field}' still contains an unsubstituted {{PLACEHOLDER}}" if text =~ /\{\{.*\}\}/
         errors << "#{locale}: '#{field}' contains an emoji — Apple rejects these in store text" if text =~ emoji_pattern
       end
     end

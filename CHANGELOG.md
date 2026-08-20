@@ -1,5 +1,43 @@
 # Changelog
 
+## [1.10.3] - 2026-08-20
+
+Everything here was found pushing Colorful's first release to the App Store.
+
+### Fixed
+- `Deliverfile` no longer sets `automatic_release` or `phased_release`. App Store
+  Connect rejects the ENTIRE metadata PATCH with "The attribute 'releaseType' can
+  not be modified" whenever the version has no build attached — the state every
+  first release is in — and it fails even when the value being sent matches what
+  the version already has. `phased_release` is worse: Apple does not offer phased
+  release for an app's first version at all. deliver omits `releaseType` when
+  `automatic_release` is nil, so leaving both unset is the fix. This blocked the
+  metadata push for a real app; every app adopting PES would have hit it on its
+  first release.
+- `validate_metadata` now recognises the scaffold's own text. It only ever looked
+  for the string `UPDATE THIS`, which `metadata-locale.template.json` never
+  emits — so "First paragraph of the store description." and
+  "comma,separated,max,100,chars" passed every PR check and were one merge away
+  from the live listing. It now fails on each string the template seeds, and on
+  any unsubstituted `{{PLACEHOLDER}}`.
+- `scripts/ci/validate_screenshots.py` moved from MANAGED to SEEDED in
+  `update.sh`. The file carries a `{{ EDIT ... for this app }}` marker and must
+  differ per app — a landscape-only app transposes every dimension — but being
+  MANAGED meant `update.sh` overwrote those edits on the next update. A file that
+  is meant to be edited per app cannot be one PES overwrites.
+
+### Added
+- `scripts/ci/validate_urls.py`, wired into `pr.yml`'s `validate-metadata` job:
+  fetches every URL the app ships — `support_url`, `privacy_url` and
+  `marketing_url` from the store metadata, plus anything under `links` in
+  `config.json` — and fails on a 4xx/5xx. Every existing check validated URL
+  *shape*, and shape is not the failure mode: PES itself scaffolds
+  `https://<owner>.github.io/<repo>/privacy`, which is well-formed and 404s until
+  someone enables GitHub Pages. Apple requires a working privacy URL and rejects
+  the listing over a dead one, at submission, long after CI went green. Network
+  and DNS errors are reported as warnings rather than failures — a check that
+  fails on runner flake is a check people learn to re-run.
+
 ## [1.10.2] - 2026-08-20
 
 ### Removed
