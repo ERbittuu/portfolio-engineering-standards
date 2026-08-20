@@ -79,9 +79,17 @@ public extension SYSBootstrappedApp {
     var body: some Scene {
         WindowGroup {
             decorate(screen(for: startup.state))
+                // Deliberately not `.task`. Its opaque return type lives in
+                // SwiftUICore, which a Swift package is not an allowed client of,
+                // so a device archive fails to link with an undefined symbol
+                // while the simulator build passes. onAppear plus an explicit
+                // Task produces the same behaviour and links everywhere.
+                //
                 // SwiftUI may run this more than once for the same view; begin()
                 // ignores the repeat rather than launching twice.
-                .task { await startup.begin(afterReady: afterReady) }
+                .onAppear {
+                    Task { await startup.begin(afterReady: afterReady) }
+                }
         }
     }
 

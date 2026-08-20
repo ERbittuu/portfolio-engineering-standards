@@ -1,5 +1,25 @@
 # Changelog
 
+## [1.15.2] - 2026-08-21
+
+### Fixed
+- `SYSBootstrappedApp` and `SYSAssetGate` no longer use `.task`. Its opaque return
+  type lives in SwiftUICore, which a Swift package is **not an allowed client of**,
+  so an app archiving for a device failed to link:
+
+      Undefined symbol: opaque type descriptor for
+      <<opaque return type of SwiftUI.View.task(name:priority:file:line:_:)>>
+      ld: warning: cannot link directly with 'SwiftUICore' because product
+      being built is not an allowed client of it
+
+  It compiles and links fine for the simulator, so every PR check was green and
+  the failure appeared only in Apple's CI after the merge — the slowest place to
+  diagnose it. `onAppear` plus an explicit `Task` does the same work and links
+  everywhere; `SYSAssetGate` keeps reload-on-id through `onChange`.
+
+  Found by a real app's first automated release build, and reproduced locally with
+  a device archive before and after rather than guessing against Xcode Cloud.
+
 ## [1.15.1] - 2026-08-20
 
 ### Fixed

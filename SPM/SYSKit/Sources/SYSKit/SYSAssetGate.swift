@@ -70,7 +70,11 @@ public struct SYSAssetGate<Ready: View, Loading: View, Failed: View>: View {
             case .failed: failed { Task { await run(force: true) } }
             }
         }
-        .task(id: id) { await run() }
+        // Deliberately not `.task(id:)` — see SYSBootstrappedApp: that modifier's
+        // opaque return type lives in SwiftUICore, which a package cannot link
+        // against, and the failure only appears when archiving for a device.
+        .onAppear { Task { await run() } }
+        .onChange(of: id) { _ in Task { await run() } }
     }
 
     @MainActor
