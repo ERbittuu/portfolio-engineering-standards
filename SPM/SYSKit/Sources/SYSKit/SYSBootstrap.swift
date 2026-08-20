@@ -10,6 +10,10 @@ public enum SYSAppState: Equatable {
     case onboarding
     /// Just updated, and there are notes for this version.
     case whatsNew([String])
+    /// Required content could not be downloaded, and the app cannot run without
+    /// it. The app shows its own error screen; call `SYSBootstrap.retryAssets()`
+    /// from the retry button.
+    case dataUnavailable(SYSAssetsError)
     /// Normal start — show home.
     case ready
 }
@@ -31,9 +35,18 @@ public enum SYSBootstrap {
     /// on cached config regardless — an offline launch is never blocked.
     public static var gateRefreshTimeout: TimeInterval = 2.5
 
+    /// - Parameters:
+    ///   - requiresAssets: true for apps that ship no content in the bundle and
+    ///     cannot draw anything until the required packs are downloaded. Startup
+    ///     then fails closed with `.dataUnavailable` rather than reaching a home
+    ///     screen with nothing to show.
+    ///   - assetProgress: called on the download's task while packs are fetched.
+    ///     Hop to the main actor before touching UI.
     public static func start(
         config: SYSConfig = .shared,
-        onboardingEnabled: Bool = true
+        onboardingEnabled: Bool = true,
+        requiresAssets: Bool = false,
+        assetProgress: (@Sendable (SYSAssetProgress) -> Void)? = nil
     ) async -> SYSAppState {
         // 1. Local config first — instant, always succeeds.
         config.load()
@@ -58,17 +71,46 @@ public enum SYSBootstrap {
             )
         }
 
-        // 5. Onboarding before anything else the user could act on.
+        // 5. Content the app cannot start without. After the gates, because a
+        //    maintenance or force-update screen must still appear on a device
+        //    that cannot download anything — those are exactly the situations
+        //    where the download is likely to fail too, and the user needs the
+        //    real reason rather than a generic network error.
+        if requiresAssets {
+            let prepared = await SYSAssets.shared.prepareRequired(progress: assetProgress)
+            if case let .failure(error) = prepared {
+                SYSLogger.error("startup: required content unavailable — \(error)")
+                return .dataUnavailable(error)
+            }
+        }
+
+        // 6. Onboarding before anything else the user could act on.
         if onboardingEnabled, SYSOnboarding.shouldShow {
             return .onboarding
         }
 
-        // 6. Then release notes, once per version.
+        // 7. Then release notes, once per version.
         if SYSWhatsNew.shouldShow(config: config), let notes = SYSWhatsNew.notes(config: config) {
             return .whatsNew(notes)
         }
 
         return .ready
+    }
+
+    /// Retries the required-content download after `.dataUnavailable`.
+    ///
+    /// Already-cached packs are skipped, so this costs only what is still
+    /// missing. Returns the state to show next — `.ready` on success, or
+    /// `.dataUnavailable` again with the current reason.
+    public static func retryAssets(
+        config: SYSConfig = .shared,
+        onboardingEnabled: Bool = true,
+        assetProgress: (@Sendable (SYSAssetProgress) -> Void)? = nil
+    ) async -> SYSAppState {
+        let prepared = await SYSAssets.shared.prepareRequired(progress: assetProgress)
+        if case let .failure(error) = prepared { return .dataUnavailable(error) }
+        if onboardingEnabled, SYSOnboarding.shouldShow { return .onboarding }
+        return resume(config: config)
     }
 
     /// Continues after the app dismisses onboarding or what's-new.

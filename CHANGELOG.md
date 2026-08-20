@@ -1,5 +1,41 @@
 # Changelog
 
+## [1.12.0] - 2026-08-20
+
+### Added
+- **`SYSAssets`** — the download, verify and cache layer for apps that ship
+  content separately from the binary. Fetches the site's `manifest.json`,
+  downloads the packs the app cannot start without, checks each against the
+  SHA-256 the manifest published, and keeps them in Application Support. Renders
+  nothing: it returns results and progress, the app owns every pixel.
+
+  Failures are separated by what the user can do about them. `offline` is worth a
+  retry button; `corrupt` is not retried at all, because re-downloading fetches
+  the same bad bytes — the server is wrong, not the connection; a 4xx will answer
+  identically next time; `unsupportedManifest` means this build is too old to read
+  what is being served, and guessing at a newer format is how you ship a crash to
+  the installs you can least afford to break. Only genuine network failures retry,
+  three times with a short backoff.
+
+  Offline with a manifest from a previous launch is treated as success, not
+  failure — cached packs still resolve, and that is a working app.
+
+- **`SYSBootstrap.start(requiresAssets:)`** and the `.dataUnavailable` state, for
+  apps with nothing in the bundle to fall back on. Startup fails closed instead of
+  reaching a home screen with nothing to draw. The check runs *after* the
+  maintenance and force-update gates, because a device that cannot download is
+  exactly the one that needs the real reason rather than a generic network error.
+  `SYSBootstrap.retryAssets()` backs the app's retry button and skips whatever is
+  already cached.
+
+- **`SYSHash`** — SHA-256 for integrity checks. CryptoKit where it exists, and a
+  plain-Swift FIPS 180-4 transcription elsewhere, so SYSKit still builds and tests
+  with no Xcode. Both paths are tested against the published vectors and against
+  each other, including the 55/56/57 and 63/64/65-byte padding boundaries where a
+  wrong implementation still passes short inputs.
+
+11 new tests (22 → 33).
+
 ## [1.11.1] - 2026-08-20
 
 ### Fixed

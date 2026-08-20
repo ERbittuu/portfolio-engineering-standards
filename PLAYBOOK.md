@@ -326,6 +326,45 @@ double-digit minor.
 and refuses a `minimumVersion` above the version live on the App Store — that
 combination blocks 100% of users with no version available to update to.
 
+### Hosted content
+
+An app that ships its content separately from its binary — artwork, levels,
+lessons — uses `SYSAssets`. The site serves a `manifest.json` naming every pack;
+`Data/build.py` produces it alongside `config.json` in one staging step, because
+a Hosting deploy replaces the whole site and a second job deploying "just its own
+files" deletes everything else.
+
+Pack filenames are **content-addressed** (`seaworld-3446a234.json`). New content
+gets a new filename, so an installed app keeps resolving the URL it already
+cached until it refreshes the manifest, and `/packs/**` can be marked immutable.
+Packs are JSON, not zip: iOS has no public unzip API and PES forbids remote
+packages, so a zip means hand-writing a zip reader — while Hosting gzips JSON on
+the wire for the same bytes. For one real app the JSON packs gzip *smaller* than
+the zips did, because gzip compresses across the whole pack.
+
+For apps whose content is **not** optional — nothing in the bundle to fall back
+on — pass `requiresAssets: true` to `SYSBootstrap.start`. Startup then fails
+closed with `.dataUnavailable(SYSAssetsError)` instead of reaching a home screen
+with nothing to draw, and the app shows its own error screen wired to
+`SYSBootstrap.retryAssets()`. The check runs *after* the maintenance and
+force-update gates: a device that cannot download is exactly the one that needs
+the real reason rather than a generic network error.
+
+Downloads verify the manifest's SHA-256 before a pack is accepted, and a hash
+mismatch is not retried — the server is wrong, not the connection. A 4xx is not
+retried either. Only genuine network failures are, three times with a short
+backoff, because the app's retry button is the real recovery path.
+
+| Concern | Handler |
+|---|---|
+| Pack index, download, cache, prune | `SYSAssets` |
+| Startup gating on required content | `SYSBootstrap` (`requiresAssets:`) |
+| Integrity | `SYSHash` |
+
+**Content that is remote-only makes first launch require a network.** That is a
+product decision, not a technical one — if the app claims to work offline, the
+claim has to change or a starter set has to ship in the bundle.
+
 ### Analytics
 
 The manager is shared; the vocabulary is not. Apps declare their own events
