@@ -28,7 +28,9 @@ fi
 
 # ── vendored third-party is never hand-edited (PLAYBOOK §8) ─────────────
 # SYSKit is ours and lives here too, so it is exempt.
-VENDORED=$(printf '%s\n' "$STAGED" | grep -E "^App/Packages/" | grep -vE "^App/Packages/SYS" || true)
+# .vendor-version is PES metadata that update.sh writes into vendored packages,
+# not upstream source — blocking it made our own tooling unable to commit.
+VENDORED=$(printf '%s\n' "$STAGED" | grep -E "^App/Packages/" | grep -vE "^App/Packages/SYS|/\.vendor-version$" || true)
 if [ -n "$VENDORED" ]; then
   echo "⚠ Editing vendored third-party source:"
   printf '    %s\n' $VENDORED
